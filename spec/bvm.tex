@@ -1,0 +1,67 @@
+\documentclass[10pt]{article}
+\usepackage{hyperref}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{minted}
+\usepackage{tikz}
+\usetikzlibrary{arrows,backgrounds,shapes,matrix,positioning,fit,calc}
+\usetikzlibrary{decorations.pathreplacing,angles,quotes}
+\usetikzlibrary{arrows.meta}
+\usetikzlibrary{calendar}
+\usetikzlibrary{trees}
+
+
+\title{BitcoinVM}
+\date{August 8, 2022}
+\author{Saravanan Vijayakumaran}
+
+\begin{document}
+\maketitle
+\begin{abstract}
+  A BitcoinVM is a circuit which maintains the set of all Bitcoin UTXOs in a sparse Merkle tree (SMT). Each new Bitcoin block will be used to update the SMT using a validity proof. The SMT can be used to generate privacy-preserving proofs of ownership of a certain amount of bitcoins. Such proofs will enable privacy-preserving proofs of solvency of cryptocurrency exchanges.
+\end{abstract}
+  
+\section{Motivation}%
+\label{sec:motivation}
+Cryptocurrency exchanges may engage in fractional-reserve operations, where they sell more bitcoins to their customers than they own. Provisions \cite{Dagher2015} was the first privacy-preserving proof of solvency protocol to address this issue.
+
+A shortcoming of the Provisions protocol was that it could only include bitcoins stored in \textit{Pay To Public Key (P2PK)} and \textit{Pay To Public Key Hash (P2PKH)} addresses, with the additional constraint that the preimage of the P2PKH addresses must be known. Even before SegWit activation, Bitcoin supported two additional address types: \textit{$m$-of-$n$ Multi-signature (multisig)} and \textit{Pay to Script Hash (P2SH)} adddresses \cite[Section 5.5]{Vijayakumaran2017}.
+
+Multisig addresses offer better security and flexibility by requiring signatures from any $m$ out of $n$ public keys to spend a UTXO. Multisig addresses require all $n$ keys to be explicitly specified in a UTXO, thereby increasing the transaction cost of sending bitcoins to a multisig address.\footnote{Bitcoin transaction fees is proportional to the length of the transaction.} P2SH addresses solve this issue by requiring that only a 20 byte hash (SHA256 + RIPEMD160) of a multisig address be specified to receive funds into it.
+
+To the best of our knowledge, there is no publicly verifiable privacy-preserving proof of reserves protocol for Bitcoin that supports all the address types. The Kraken exchange uses a third-party auditor to help run their proof of reserves protocol \cite{KrakenPoR}. In Feb 2020, Kraken CEO Jesse Powell mentioned lack of multisig address support in Provisions as one of the reasons to defer attempting its use \cite{KrakenCEO}.
+
+\textbf{Goal:} Enable privacy-preserving proof of Bitcoin reserves that is publicly verifiable on-chain. 
+
+\section{BitcoinVM}%
+\label{sec:bitcoinvm}
+To prove ownership of Bitcoin UTXOs in a privacy-preserving manner, they have to be stored in data structure that is amenable to zero-knowledge proofs. Our initial thoughts are as follows:
+\begin{enumerate}
+  \item Store all the Bitcoin UTXOs upto a certain block height in a sparse Merkle tree (SMT). The key to the leaves could be a hash of the transaction ID (TxID) and output index that identifies a UTXO.
+  \item Each Bitcoin block has transactions that spend old UTXOs and create new ones. The SMT would need to be updated after each block.
+  \item Transaction validation in Bitcoin involves feeding a challenge script and its corresponding response script as inputs to a stack machine which supports a small number of opcodes. 
+  \item The BitcoinVM will be the circuit that gives a validity proof of the correctness of SMT root transitions. It needs to be able to verify scripts written in Bitcoin Script. 
+  \item Given a valid SMT with UTXOs as its leaves, ownership of a certain amount of coins can be proven using privacy-preserving Merkle proofs (like in Tornado Cash).
+\end{enumerate}
+
+\section{Challenges}%
+\label{sec:challenges}
+BitcoinVM needs several circuits not currently present in the Halo2 ecosystem.
+\begin{itemize}
+  \item RIPEMD160 hash function
+  \item Bitcoin Script validator
+    \begin{itemize}
+      \item Multisig response script validator
+      \item P2SH response script validator
+      \item SegWit response script validator
+    \end{itemize}
+  \item Sparse Merkle Tree (??)
+  \item And probably many more
+\end{itemize}
+
+
+
+\newpage
+\bibliographystyle{unsrt}
+\bibliography{bvm}
+\end{document}

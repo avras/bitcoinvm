@@ -1,1 +1,2 @@
-pub mod boolean_functions;
+pub mod constants;
+pub mod helper_functions;

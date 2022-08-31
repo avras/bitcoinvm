@@ -23,13 +23,9 @@ pub fn rol(word: u32, amount: u8) -> u32 {
     (word << amount) | (word >> (32-amount))
 }
 
-pub fn rol10(word: u32) -> u32 {
-    rol(word, 10)
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{f1, f2, f3, f4, f5, rol, rol10};
+    use super::{f1, f2, f3, f4, f5, rol};
     use rand::Rng;
 
 
@@ -86,13 +82,6 @@ mod tests {
         assert_eq!(rol(0xABCD_EFAB, 8), 0xCDEF_ABAB);
         assert_eq!(rol(0xABCD_EFAB, 12), 0xDEFA_BABC);
         assert_eq!(rol(0xABCD, 10), 0x2AF_3400);
-    }
-
-    #[test]
-    fn test_rol10 () {
-        let mut rng = rand::thread_rng();
-        let x: u32 = rng.gen();
-        assert_eq!(rol(x, 10), rol10(x));
     }
 
 }

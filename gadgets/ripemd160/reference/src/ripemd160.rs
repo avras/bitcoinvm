@@ -79,7 +79,7 @@ pub fn left_step(
         a: s.e,
         b: t,
         c: s.b,
-        d: rol10(s.c),
+        d: rol(s.c, 10),
         e: s.d
     }
 }
@@ -105,7 +105,7 @@ pub fn right_step(
         a: s.e,
         b: t,
         c: s.b,
-        d: rol10(s.c),
+        d: rol(s.c, 10),
         e: s.d
     }
 }

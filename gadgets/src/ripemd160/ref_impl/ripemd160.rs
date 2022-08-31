@@ -1,5 +1,5 @@
-use crate::constants::*;
-use crate::helper_functions::*;
+use super::constants::*;
+use super::helper_functions::*;
 
 #[derive(Default, Debug, PartialEq, Clone, Copy)]
 pub struct State {
@@ -156,8 +156,8 @@ pub fn compress_first_block(
 
 #[cfg(test)]
 mod tests {
-    use crate::constants::*;
-    use crate::helper_functions::*;
+    use super::super::constants::*;
+    use super::super::helper_functions::*;
     use super::{left_step, right_step, compress_first_block, MessageBlock, State};
     use rand::Rng;
 

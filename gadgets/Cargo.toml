@@ -1,0 +1,16 @@
+[package]
+name = "bitcoinvm_gadgets"
+version = "0.1.0"
+authors = [
+    "Saravanan Vijayakumaran <sarva@ee.iitb.ac.in>",
+]
+description = "Gadgets for BitcoinVM"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/avras/bitcoinvm"
+readme = "README.md"
+categories = ["cryptography"]
+keywords = ["halo", "proofs", "zcash", "zkp", "zkSNARKs", "bitcoin"]
+
+[dependencies]
+rand = "0.8"

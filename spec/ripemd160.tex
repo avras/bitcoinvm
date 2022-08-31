@@ -1,0 +1,37 @@
+\documentclass[10pt]{article}
+\usepackage{hyperref}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{minted}
+\usepackage{tikz}
+\usepackage[a4paper]{geometry}
+\usetikzlibrary{arrows,backgrounds,shapes,matrix,positioning,fit,calc}
+\usetikzlibrary{decorations.pathreplacing,angles,quotes}
+\usetikzlibrary{arrows.meta}
+\usetikzlibrary{calendar}
+\usetikzlibrary{trees}
+
+
+\title{RIPEMD160 Gadget Implementation using the \texttt{halo2} API}
+\author{Saravanan Vijayakumaran}
+
+\begin{document}
+\maketitle
+  
+\section{Motivation}%
+\label{sec:motivation}
+The HASH160 opcode in the Bitcoin protocol hashes a given byte sequence with the SHA256 hash function followed by the RIPEMD160 hash function. It is used to obtain 20-byte hashes of objects like public keys and Bitcoin scripts.
+
+To prove the validity of Bitcoin response scripts for Pay-to-Public-Key (P2PK) and Pay-to-Script-Hash (P2SH) UTXOs using the \texttt{halo2} API, we need an implementation of a HASH160 gadget.
+A SHA256 gadget implementation already exists in the \href{https://github.com/zcash/halo2/tree/main/halo2_gadgets/src}{\texttt{zcash/halo2}} repository. In this document, we describe the design and implementation of a RIPEMD160 gadget. It is heavily inspired by SHA256 gadget implementation.
+
+\section{RIPEMD160 Specification}%
+\label{sec:ripemd160_specification}
+A specification of the RIPEMD160 hash function is available at \url{https://homes.esat.kuleuven.be/~bosselae/ripemd160.html}, along with a C implementation. We repeat it here for convenience and for fixing the notation use to describe the gadget implementation. 
+
+
+
+\newpage
+\bibliographystyle{unsrt}
+\bibliography{bvm}
+\end{document}

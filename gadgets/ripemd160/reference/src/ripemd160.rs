@@ -144,10 +144,7 @@ pub fn compress(
         left_state = left_step(j, left_state.clone(), msg_block);
         right_state = right_step(j, right_state.clone(), msg_block);
     }
-    println!("{:?}", left_state);
-    println!("{:?}", right_state);
     let chain_state = combine_left_right_states(s, left_state, right_state);
-    println!("{:?}", chain_state);
     chain_state.into()
 }
 
@@ -198,6 +195,7 @@ mod tests {
 
     #[test]
     fn test_compress_first_block () {
-        assert_eq!(compress_first_block(PADDED_TEST_INPUT.into()), TEST_INPUT_HASH);
+        assert_eq!(compress_first_block(PADDED_TEST_INPUT_ABC.into()), TEST_INPUT_HASH_ABC);
+        assert_eq!(compress_first_block(PADDED_TEST_INPUT_A2Z.into()), TEST_INPUT_HASH_A2Z);
     }
 }

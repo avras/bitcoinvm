@@ -1,6 +1,7 @@
 pub const DIGEST_SIZE: usize = 5;
 pub const BLOCK_SIZE: usize = 16;
 pub const ROUNDS: usize = 80;
+pub const ROUND_PHASE_SIZE: usize = 16;
 
 pub const INITIAL_VALUES: [u32; DIGEST_SIZE] = [
     0x6745_2301,

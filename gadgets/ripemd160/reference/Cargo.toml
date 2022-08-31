@@ -3,5 +3,9 @@ name = "ripemd160"
 version = "0.1.0"
 edition = "2021"
 
+[lib]
+name = "reference"
+path = "src/lib.rs"
+
 [dependencies]
 rand = "0.8"

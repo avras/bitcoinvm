@@ -63,13 +63,9 @@ impl MessageScheduleConfig {
         extras: [Column<Advice>; NUM_EXTRA_ADVICE_COLS],
     ) -> Self {
         // Create fixed columns for the selectors we will require.
-        let s_word = meta.selector();
         let s_decompose_0 = meta.selector();
 
         // Rename these here for ease of matching the gates to the specification.
-        let a_0 = lookup.tag;
-        let a_1 = lookup.dense;
-        let a_2 = lookup.spread;
         let a_3 = extras[0];
         let a_4 = extras[1];
         let a_5 = message_schedule;

@@ -290,13 +290,13 @@ mod tests {
     use super::{get_tag, SpreadTableChip, SpreadTableConfig};
     use rand::Rng;
 
-    use halo2_proofs::{
+    use halo2::{
         arithmetic::FieldExt,
         circuit::{Layouter, SimpleFloorPlanner, Value},
         dev::MockProver,
         plonk::{Advice, Circuit, Column, ConstraintSystem, Error},
     };
-    use halo2curves::pasta::Fp;
+    use halo2::halo2curves::pasta::Fp;
 
     #[test]
     fn lookup_table() {

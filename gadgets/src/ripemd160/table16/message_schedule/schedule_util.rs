@@ -1,3 +1,5 @@
+use crate::ripemd160::table16::{util::i2lebsp, spread_table::{SpreadWord, SpreadVar}};
+
 use super::super::AssignedBits;
 use super::MessageScheduleConfig;
 
@@ -33,23 +35,26 @@ impl MessageScheduleConfig {
 
         let row = get_word_row(word_idx);
 
-        let w_lo = {
-            let w_lo_val = word.map(|word| word as u16);
-            AssignedBits::<16>::assign(region, || format!("W_{}_lo", word_idx), a_3, row, w_lo_val)?
-        };
-        let w_hi = {
-            let w_hi_val = word.map(|word| (word >> 16) as u16);
-            AssignedBits::<16>::assign(region, || format!("W_{}_hi", word_idx), a_4, row, w_hi_val)?
-        };
+        let x_lo_val = word.map(|word| word as u16);
+        let x_lo_bvec: Value<[bool; 16]> = x_lo_val.map(|x| i2lebsp(x.into()));
+        let spread_x_lo = x_lo_bvec.map(SpreadWord::<16,32>::new);
+        let spread_x_lo = SpreadVar::with_lookup(region, &self.lookup, row, spread_x_lo)?;
+        spread_x_lo.dense.copy_advice(|| format!("X_{}_lo", word_idx), region, a_3, row)?;
+
+        let x_hi_val = word.map(|word| (word >> 16) as u16);
+        let x_hi_bvec: Value<[bool; 16]> = x_hi_val.map(|x| i2lebsp(x.into()));
+        let spread_x_hi = x_hi_bvec.map(SpreadWord::<16,32>::new);
+        let spread_x_hi = SpreadVar::with_lookup(region, &self.lookup, row+1, spread_x_hi)?;
+        spread_x_hi.dense.copy_advice(|| format!("X_{}_hi", word_idx), region, a_4, row)?;
 
         let word = AssignedBits::<32>::assign(
             region,
-            || format!("W_{}", word_idx),
+            || format!("X_{}", word_idx),
             self.message_schedule,
             row,
             word,
         )?;
 
-        Ok((word, (w_lo, w_hi)))
+        Ok((word, (spread_x_lo.dense, spread_x_hi.dense)))
     }
 }

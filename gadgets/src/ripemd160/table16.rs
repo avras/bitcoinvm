@@ -13,12 +13,14 @@ use halo2::halo2curves::pasta::pallas;
 
 mod compression;
 mod gates;
+mod message_schedule;
 mod spread_table;
 mod util;
 
 use gates::*;
+use spread_table::*;
 use util::*;
-
+use super::ref_impl::constants::*;
 
 #[derive(Clone, Copy, Debug, Default)]
 /// A word in a `Table16` message block.
@@ -200,3 +202,5 @@ impl AssignedBits<32> {
         .map(AssignedBits)
     }
 }
+
+pub const NUM_EXTRA_ADVICE_COLS: usize = 2;

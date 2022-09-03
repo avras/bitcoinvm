@@ -15,7 +15,7 @@ impl<F: FieldExt> CompressionGate<F> {
     // Gate for B ^ C ^ D; XOR of three 32 bit words
     // Output is in spread_r0_even, spread_r1_even
     #[allow(clippy::too_many_arguments)]
-    fn s_f1(
+    fn f1_gate(
         s_f1: Expression<F>,
         spread_r0_even: Expression<F>,
         spread_r0_odd: Expression<F>,
@@ -48,7 +48,7 @@ impl<F: FieldExt> CompressionGate<F> {
     // output can be rolled into the calculation of T in each round
     // Output is in spread_p0_odd, spread_p1_odd
     #[allow(clippy::too_many_arguments)]
-    pub fn s_ch(
+    pub fn ch_gate(
         s_ch: Expression<F>,
         spread_p0_even: Expression<F>,
         spread_p0_odd: Expression<F>,
@@ -80,7 +80,7 @@ impl<F: FieldExt> CompressionGate<F> {
     // output can be rolled into the calculation of T in each round
     // Output is in spread_q0_odd, spread_q1_odd
     #[allow(clippy::too_many_arguments)]
-    pub fn s_ch_neg(
+    pub fn ch_neg_gate(
         s_ch_neg: Expression<F>,
         spread_q0_even: Expression<F>,
         spread_q0_odd: Expression<F>,
@@ -125,7 +125,8 @@ impl<F: FieldExt> CompressionGate<F> {
     // f3(X, Y, Z) = (X | !Y ) ^ Z
     // f5(X, Y, Z) = X ^ (Y | !Z)
     // Output is in spread_r0_even, spread_r1_even
-    pub fn s_or_not_xor(
+    #[allow(clippy::too_many_arguments)]
+    pub fn or_not_xor_gate(
         s_or_not_xor: Expression<F>,
         spread_r0_even: Expression<F>,
         spread_r0_odd: Expression<F>,

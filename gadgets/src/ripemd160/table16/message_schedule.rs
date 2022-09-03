@@ -4,7 +4,7 @@ Based on code from https://github.com/privacy-scaling-explorations/halo2/blob/8c
 
 use std::convert::TryInto;
 
-use super::{AssignedBits, BlockWord, SpreadInputs, /* Table16Assignment,*/ NUM_EXTRA_ADVICE_COLS};
+use super::{AssignedBits, BlockWord, SpreadInputs, /* Table16Assignment,*/ NUM_ADVICE_COLS};
 use super::{BLOCK_SIZE, ROUNDS};
 use halo2::{
     circuit::Layouter,
@@ -36,8 +36,7 @@ impl std::ops::Deref for MessageWord {
 #[derive(Clone, Debug)]
 pub(super) struct MessageScheduleConfig {
     lookup: SpreadInputs,
-    message_schedule: Column<Advice>,
-    extras: [Column<Advice>; NUM_EXTRA_ADVICE_COLS],
+    advice: [Column<Advice>; NUM_ADVICE_COLS],
 
     /// Decomposition gate for X[0..16]
     s_decompose_0: Selector,
@@ -48,27 +47,22 @@ pub(super) struct MessageScheduleConfig {
 impl MessageScheduleConfig {
     /// Configures the message schedule.
     ///
-    /// `message_schedule` is the column into which the message schedule will be placed.
-    /// The caller must create appropriate permutations in order to load schedule words
-    /// into the compression rounds.
-    ///
-    /// `extras` contains columns that the message schedule will only use for internal
+    /// `advice` contains columns that the message schedule will only use for internal
     /// gates, and will not place any constraints on (such as lookup constraints) outside
     /// itself.
     #[allow(clippy::many_single_char_names)]
     pub(super) fn configure(
         meta: &mut ConstraintSystem<pallas::Base>,
         lookup: SpreadInputs,
-        message_schedule: Column<Advice>,
-        extras: [Column<Advice>; NUM_EXTRA_ADVICE_COLS],
+        advice: [Column<Advice>; NUM_ADVICE_COLS],
     ) -> Self {
         // Create fixed columns for the selectors we will require.
         let s_decompose_0 = meta.selector();
 
         // Rename these here for ease of matching the gates to the specification.
-        let a_3 = extras[0];
-        let a_4 = extras[1];
-        let a_5 = message_schedule;
+        let a_3 = advice[0];
+        let a_4 = advice[1];
+        let a_5 = advice[2];
 
         // s_decompose_0 for all words
         meta.create_gate("s_decompose_0", |meta| {
@@ -82,8 +76,7 @@ impl MessageScheduleConfig {
 
         MessageScheduleConfig {
             lookup,
-            message_schedule,
-            extras,
+            advice,
             s_decompose_0,
         }
     }

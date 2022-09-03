@@ -30,8 +30,9 @@ impl MessageScheduleConfig {
         word_idx: usize,
     ) -> Result<(AssignedBits<32>, (AssignedBits<16>, AssignedBits<16>)), Error> {
         // Rename these here for ease of matching the gates to the specification.
-        let a_3 = self.extras[0];
-        let a_4 = self.extras[1];
+        let a_3 = self.advice[0];
+        let a_4 = self.advice[1];
+        let a_5 = self.advice[1];
 
         let row = get_word_row(word_idx);
 
@@ -50,7 +51,7 @@ impl MessageScheduleConfig {
         let word = AssignedBits::<32>::assign(
             region,
             || format!("X_{}", word_idx),
-            self.message_schedule,
+            a_5,
             row,
             word,
         )?;

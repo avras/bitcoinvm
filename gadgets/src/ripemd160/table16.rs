@@ -203,4 +203,4 @@ impl AssignedBits<32> {
     }
 }
 
-pub const NUM_EXTRA_ADVICE_COLS: usize = 2;
+pub const NUM_ADVICE_COLS: usize = 3;

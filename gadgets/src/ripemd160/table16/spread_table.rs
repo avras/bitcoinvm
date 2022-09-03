@@ -12,11 +12,14 @@ use halo2::halo2curves::pasta::pallas;
 use std::convert::TryInto;
 use std::marker::PhantomData;
 
-const BITS_7: usize = 1 << 7;
+const BITS_8: usize = 1 << 8;
+const BITS_9: usize = 1 << 9;
 const BITS_10: usize = 1 << 10;
 const BITS_11: usize = 1 << 11;
+const BITS_12: usize = 1 << 12;
 const BITS_13: usize = 1 << 13;
 const BITS_14: usize = 1 << 14;
+const BITS_15: usize = 1 << 15;
 
 /// An input word into a lookup, containing (tag, dense, spread)
 #[derive(Copy, Clone, Debug)]
@@ -29,18 +32,24 @@ pub(super) struct SpreadWord<const DENSE: usize, const SPREAD: usize> {
 /// Helper function that returns tag of 16-bit input
 pub fn get_tag(input: u16) -> u8 {
     let input = input as usize;
-    if input < BITS_7 {
+    if input < BITS_8 {
         0
-    } else if input < BITS_10 {
+    } else if input < BITS_9 {
         1
-    } else if input < BITS_11 {
+    } else if input < BITS_10 {
         2
-    } else if input < BITS_13 {
+    } else if input < BITS_11 {
         3
-    } else if input < BITS_14 {
+    } else if input < BITS_12 {
         4
-    } else {
+    } else if input < BITS_13 {
         5
+    } else if input < BITS_14 {
+        6
+    } else if input < BITS_15 {
+        7
+    } else {
+        8
     }
 }
 
@@ -262,7 +271,9 @@ impl SpreadTableConfig {
 
                 // i holds the zero-indexed row number for the next table row.
                 match i {
-                    BITS_7 | BITS_10 | BITS_11 | BITS_13 | BITS_14 => *tag += F::one(),
+                    BITS_8 | BITS_9 | BITS_10 
+                    | BITS_11 | BITS_12 | BITS_13 
+                    | BITS_14 | BITS_15 => *tag += F::one(),
                     _ => (),
                 }
                 *dense += F::one();

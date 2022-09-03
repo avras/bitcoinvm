@@ -202,6 +202,539 @@ impl<F: FieldExt> CompressionGate<F> {
                 )
         )
     }
-    
 
+    // Gate for rotate_left(W, 5)
+    // word = (a,b,c) = (5, 11, 16) chunks with a = (a_lo, a_hi) = (2, 3) chunks
+    #[allow(clippy::too_many_arguments)]
+    pub fn rotate_left_5_gate(
+        s_rotate_left_5: Expression<F>,
+        a_lo: Expression<F>,
+        a_hi: Expression<F>,
+        b: Expression<F>,
+        tag_b: Expression<F>,
+        c: Expression<F>,
+        word_lo: Expression<F>,
+        word_hi: Expression<F>,
+        rol_5_word_lo: Expression<F>,
+        rol_5_word_hi: Expression<F>,
+    ) -> Constraints<
+        F,
+        (&'static str, Expression<F>),
+        impl Iterator<Item = (&'static str, Expression<F>)>,
+    > {
+        // Note: There is no need to check the tag of c as it will be constrained to be 16 bits 
+        // by the lookup table
+        let range_check_tag_b = Gate::range_check(tag_b, 0, 3); // tag <= 3 => b < 2^11
+        let range_check_a_lo = Gate::two_bit_range(a_lo.clone());
+        let range_check_a_hi = Gate::three_bit_range(a_hi.clone());
+
+        let word_check = a_lo.clone()
+        + a_hi.clone() * F::from(1 << 2)
+        + b.clone() * F::from(1 << 5)
+        + c.clone() * F::from(1 << 16)
+        + word_lo * (-F::one())
+        + word_hi * F::from(1 << 16) * (-F::one());
+
+        let rol_5_word_check = b
+        + c * F::from(1 << 11)
+        + a_lo * F::from(1 << 27)
+        + a_hi * F::from(1 << 29)
+        + rol_5_word_lo * (-F::one())
+        + rol_5_word_hi * F::from(1 << 16) * (-F::one());
+
+        Constraints::with_selector(
+            s_rotate_left_5,
+            std::iter::empty()
+                .chain(Some(("range_check_tag_b", range_check_tag_b)))
+                .chain(range_check_a_lo)
+                .chain(range_check_a_hi)
+                .chain(Some(("word_check", word_check)))
+                .chain(Some(("rol_5_word_check", rol_5_word_check)))
+        )
+    }
+
+    // Gate for rotate_left(W, 6)
+    // word = (a,b,c) = (6, 10, 16) chunks with a = (a_lo, a_hi) = (3, 3) chunks
+    #[allow(clippy::too_many_arguments)]
+    pub fn rotate_left_6_gate(
+        s_rotate_left_6: Expression<F>,
+        a_lo: Expression<F>,
+        a_hi: Expression<F>,
+        b: Expression<F>,
+        tag_b: Expression<F>,
+        c: Expression<F>,
+        word_lo: Expression<F>,
+        word_hi: Expression<F>,
+        rol_6_word_lo: Expression<F>,
+        rol_6_word_hi: Expression<F>,
+    ) -> Constraints<
+        F,
+        (&'static str, Expression<F>),
+        impl Iterator<Item = (&'static str, Expression<F>)>,
+    > {
+        // Note: There is no need to check the tag of c as it will be constrained to be 16 bits 
+        // by the lookup table
+        let range_check_tag_b = Gate::range_check(tag_b, 0, 2); // tag <= 2 => b < 2^10
+        let range_check_a_lo = Gate::three_bit_range(a_lo.clone());
+        let range_check_a_hi = Gate::three_bit_range(a_hi.clone());
+
+        let word_check = a_lo.clone()
+        + a_hi.clone() * F::from(1 << 3)
+        + b.clone() * F::from(1 << 6)
+        + c.clone() * F::from(1 << 16)
+        + word_lo * (-F::one())
+        + word_hi * F::from(1 << 16) * (-F::one());
+
+        let rol_6_word_check = b
+        + c * F::from(1 << 10)
+        + a_lo * F::from(1 << 26)
+        + a_hi * F::from(1 << 29)
+        + rol_6_word_lo * (-F::one())
+        + rol_6_word_hi * F::from(1 << 16) * (-F::one());
+
+        Constraints::with_selector(
+            s_rotate_left_6,
+            std::iter::empty()
+                .chain(Some(("range_check_tag_b", range_check_tag_b)))
+                .chain(range_check_a_lo)
+                .chain(range_check_a_hi)
+                .chain(Some(("word_check", word_check)))
+                .chain(Some(("rol_6_word_check", rol_6_word_check)))
+        )
+    }
+
+    // Gate for rotate_left(W, 7)
+    // word = (a,b,c) = (7, 9, 16) chunks with a = (a_lo, a_hi) = (3, 4) chunks
+    #[allow(clippy::too_many_arguments)]
+    pub fn rotate_left_7_gate(
+        s_rotate_left_7: Expression<F>,
+        a_lo: Expression<F>,
+        a_hi: Expression<F>,
+        b: Expression<F>,
+        tag_b: Expression<F>,
+        c: Expression<F>,
+        word_lo: Expression<F>,
+        word_hi: Expression<F>,
+        rol_7_word_lo: Expression<F>,
+        rol_7_word_hi: Expression<F>,
+    ) -> Constraints<
+        F,
+        (&'static str, Expression<F>),
+        impl Iterator<Item = (&'static str, Expression<F>)>,
+    > {
+        // Note: There is no need to check the tag of c as it will be constrained to be 16 bits 
+        // by the lookup table
+        let range_check_tag_b = Gate::range_check(tag_b, 0, 1); // tag <= 1 => b < 2^9
+        let range_check_a_lo = Gate::three_bit_range(a_lo.clone());
+        let range_check_a_hi = Gate::four_bit_range(a_hi.clone());
+
+        let word_check = a_lo.clone()
+        + a_hi.clone() * F::from(1 << 3)
+        + b.clone() * F::from(1 << 7)
+        + c.clone() * F::from(1 << 16)
+        + word_lo * (-F::one())
+        + word_hi * F::from(1 << 16) * (-F::one());
+
+        let rol_7_word_check = b
+        + c * F::from(1 << 9)
+        + a_lo * F::from(1 << 25)
+        + a_hi * F::from(1 << 28)
+        + rol_7_word_lo * (-F::one())
+        + rol_7_word_hi * F::from(1 << 16) * (-F::one());
+
+        Constraints::with_selector(
+            s_rotate_left_7,
+            std::iter::empty()
+                .chain(Some(("range_check_tag_b", range_check_tag_b)))
+                .chain(range_check_a_lo)
+                .chain(range_check_a_hi)
+                .chain(Some(("word_check", word_check)))
+                .chain(Some(("rol_7_word_check", rol_7_word_check)))
+        )
+    }
+
+    // Gate for rotate_left(W, 8)
+    // word = (a,b,c) = (8, 8, 16) chunks with a = (a_lo, a_hi) = (4, 4) chunks
+    #[allow(clippy::too_many_arguments)]
+    pub fn rotate_left_8_gate(
+        s_rotate_left_8: Expression<F>,
+        a_lo: Expression<F>,
+        a_hi: Expression<F>,
+        b: Expression<F>,
+        tag_b: Expression<F>,
+        c: Expression<F>,
+        word_lo: Expression<F>,
+        word_hi: Expression<F>,
+        rol_8_word_lo: Expression<F>,
+        rol_8_word_hi: Expression<F>,
+    ) -> Constraints<
+        F,
+        (&'static str, Expression<F>),
+        impl Iterator<Item = (&'static str, Expression<F>)>,
+    > {
+        // Note: There is no need to check the tag of c as it will be constrained to be 16 bits 
+        // by the lookup table
+        let range_check_tag_b = Gate::range_check(tag_b, 0, 0); // tag = 0 => b < 2^8
+        let range_check_a_lo = Gate::four_bit_range(a_lo.clone());
+        let range_check_a_hi = Gate::four_bit_range(a_hi.clone());
+
+        let word_check = a_lo.clone()
+        + a_hi.clone() * F::from(1 << 4)
+        + b.clone() * F::from(1 << 8)
+        + c.clone() * F::from(1 << 16)
+        + word_lo * (-F::one())
+        + word_hi * F::from(1 << 16) * (-F::one());
+
+        let rol_8_word_check = b
+        + c * F::from(1 << 8)
+        + a_lo * F::from(1 << 24)
+        + a_hi * F::from(1 << 28)
+        + rol_8_word_lo * (-F::one())
+        + rol_8_word_hi * F::from(1 << 16) * (-F::one());
+
+        Constraints::with_selector(
+            s_rotate_left_8,
+            std::iter::empty()
+                .chain(Some(("range_check_tag_b", range_check_tag_b)))
+                .chain(range_check_a_lo)
+                .chain(range_check_a_hi)
+                .chain(Some(("word_check", word_check)))
+                .chain(Some(("rol_8_word_check", rol_8_word_check)))
+        )
+    }
+
+    // Gate for rotate_left(W, 9)
+    // word = (a,b,c) = (9, 7, 16) chunks with b = (b_lo, b_hi) = (3, 4) chunks
+    #[allow(clippy::too_many_arguments)]
+    pub fn rotate_left_9_gate(
+        s_rotate_left_9: Expression<F>,
+        a: Expression<F>,
+        tag_a: Expression<F>,
+        b_lo: Expression<F>,
+        b_hi: Expression<F>,
+        c: Expression<F>,
+        word_lo: Expression<F>,
+        word_hi: Expression<F>,
+        rol_9_word_lo: Expression<F>,
+        rol_9_word_hi: Expression<F>,
+    ) -> Constraints<
+        F,
+        (&'static str, Expression<F>),
+        impl Iterator<Item = (&'static str, Expression<F>)>,
+    > {
+        // Note: There is no need to check the tag of c as it will be constrained to be 16 bits 
+        // by the lookup table
+        let range_check_tag_a = Gate::range_check(tag_a, 0, 1); // tag <= 1 => a < 2^9
+        let range_check_b_lo = Gate::three_bit_range(b_lo.clone());
+        let range_check_b_hi = Gate::four_bit_range(b_hi.clone());
+
+        let word_check = a.clone()
+        + b_lo.clone() * F::from(1 << 9)
+        + b_hi.clone() * F::from(1 << 12)
+        + c.clone() * F::from(1 << 16)
+        + word_lo * (-F::one())
+        + word_hi * F::from(1 << 16) * (-F::one());
+
+        let rol_9_word_check = b_lo
+        + b_hi * F::from(1 << 3)
+        + c * F::from(1 << 7)
+        + a * F::from(1 << 23)
+        + rol_9_word_lo * (-F::one())
+        + rol_9_word_hi * F::from(1 << 16) * (-F::one());
+
+        Constraints::with_selector(
+            s_rotate_left_9,
+            std::iter::empty()
+                .chain(Some(("range_check_tag_a", range_check_tag_a)))
+                .chain(range_check_b_lo)
+                .chain(range_check_b_hi)
+                .chain(Some(("word_check", word_check)))
+                .chain(Some(("rol_9_word_check", rol_9_word_check)))
+        )
+    }
+
+    // Gate for rotate_left(W, 10)
+    // word = (a,b,c) = (10, 6, 16) chunks with b = (b_lo, b_hi) = (3, 3) chunks
+    #[allow(clippy::too_many_arguments)]
+    pub fn rotate_left_10_gate(
+        s_rotate_left_10: Expression<F>,
+        a: Expression<F>,
+        tag_a: Expression<F>,
+        b_lo: Expression<F>,
+        b_hi: Expression<F>,
+        c: Expression<F>,
+        word_lo: Expression<F>,
+        word_hi: Expression<F>,
+        rol_10_word_lo: Expression<F>,
+        rol_10_word_hi: Expression<F>,
+    ) -> Constraints<
+        F,
+        (&'static str, Expression<F>),
+        impl Iterator<Item = (&'static str, Expression<F>)>,
+    > {
+        // Note: There is no need to check the tag of c as it will be constrained to be 16 bits 
+        // by the lookup table
+        let range_check_tag_a = Gate::range_check(tag_a, 0, 2); // tag <= 2 => a < 2^10
+        let range_check_b_lo = Gate::three_bit_range(b_lo.clone());
+        let range_check_b_hi = Gate::three_bit_range(b_hi.clone());
+
+        let word_check = a.clone()
+        + b_lo.clone() * F::from(1 << 10)
+        + b_hi.clone() * F::from(1 << 13)
+        + c.clone() * F::from(1 << 16)
+        + word_lo * (-F::one())
+        + word_hi * F::from(1 << 16) * (-F::one());
+
+        let rol_10_word_check = b_lo
+        + b_hi * F::from(1 << 3)
+        + c * F::from(1 << 6)
+        + a * F::from(1 << 22)
+        + rol_10_word_lo * (-F::one())
+        + rol_10_word_hi * F::from(1 << 16) * (-F::one());
+
+        Constraints::with_selector(
+            s_rotate_left_10,
+            std::iter::empty()
+                .chain(Some(("range_check_tag_a", range_check_tag_a)))
+                .chain(range_check_b_lo)
+                .chain(range_check_b_hi)
+                .chain(Some(("word_check", word_check)))
+                .chain(Some(("rol_10_word_check", rol_10_word_check)))
+        )
+    }
+
+    // Gate for rotate_left(W, 11)
+    // word = (a,b,c) = (11, 5, 16) chunks with b = (b_lo, b_hi) = (2, 3) chunks
+    #[allow(clippy::too_many_arguments)]
+    pub fn rotate_left_11_gate(
+        s_rotate_left_11: Expression<F>,
+        a: Expression<F>,
+        tag_a: Expression<F>,
+        b_lo: Expression<F>,
+        b_hi: Expression<F>,
+        c: Expression<F>,
+        word_lo: Expression<F>,
+        word_hi: Expression<F>,
+        rol_11_word_lo: Expression<F>,
+        rol_11_word_hi: Expression<F>,
+    ) -> Constraints<
+        F,
+        (&'static str, Expression<F>),
+        impl Iterator<Item = (&'static str, Expression<F>)>,
+    > {
+        // Note: There is no need to check the tag of c as it will be constrained to be 16 bits 
+        // by the lookup table
+        let range_check_tag_a = Gate::range_check(tag_a, 0, 3); // tag <= 3 => a < 2^11
+        let range_check_b_lo = Gate::two_bit_range(b_lo.clone());
+        let range_check_b_hi = Gate::three_bit_range(b_hi.clone());
+
+        let word_check = a.clone()
+        + b_lo.clone() * F::from(1 << 11)
+        + b_hi.clone() * F::from(1 << 13)
+        + c.clone() * F::from(1 << 16)
+        + word_lo * (-F::one())
+        + word_hi * F::from(1 << 16) * (-F::one());
+
+        let rol_11_word_check = b_lo
+        + b_hi * F::from(1 << 2)
+        + c * F::from(1 << 5)
+        + a * F::from(1 << 21)
+        + rol_11_word_lo * (-F::one())
+        + rol_11_word_hi * F::from(1 << 16) * (-F::one());
+
+        Constraints::with_selector(
+            s_rotate_left_11,
+            std::iter::empty()
+                .chain(Some(("range_check_tag_a", range_check_tag_a)))
+                .chain(range_check_b_lo)
+                .chain(range_check_b_hi)
+                .chain(Some(("word_check", word_check)))
+                .chain(Some(("rol_11_word_check", rol_11_word_check)))
+        )
+    }
+
+    // Gate for rotate_left(W, 12)
+    // word = (a,b,c) = (12, 4, 16) chunks with b = (b_lo, b_hi) = (2, 2) chunks
+    #[allow(clippy::too_many_arguments)]
+    pub fn rotate_left_12_gate(
+        s_rotate_left_12: Expression<F>,
+        a: Expression<F>,
+        tag_a: Expression<F>,
+        b_lo: Expression<F>,
+        b_hi: Expression<F>,
+        c: Expression<F>,
+        word_lo: Expression<F>,
+        word_hi: Expression<F>,
+        rol_12_word_lo: Expression<F>,
+        rol_12_word_hi: Expression<F>,
+    ) -> Constraints<
+        F,
+        (&'static str, Expression<F>),
+        impl Iterator<Item = (&'static str, Expression<F>)>,
+    > {
+        // Note: There is no need to check the tag of c as it will be constrained to be 16 bits 
+        // by the lookup table
+        let range_check_tag_a = Gate::range_check(tag_a, 0, 4); // tag <= 4 => a < 2^12
+        let range_check_b_lo = Gate::two_bit_range(b_lo.clone());
+        let range_check_b_hi = Gate::two_bit_range(b_hi.clone());
+
+        let word_check = a.clone()
+        + b_lo.clone() * F::from(1 << 12)
+        + b_hi.clone() * F::from(1 << 14)
+        + c.clone() * F::from(1 << 16)
+        + word_lo * (-F::one())
+        + word_hi * F::from(1 << 16) * (-F::one());
+
+        let rol_12_word_check = b_lo
+        + b_hi * F::from(1 << 2)
+        + c * F::from(1 << 4)
+        + a * F::from(1 << 20)
+        + rol_12_word_lo * (-F::one())
+        + rol_12_word_hi * F::from(1 << 16) * (-F::one());
+
+        Constraints::with_selector(
+            s_rotate_left_12,
+            std::iter::empty()
+                .chain(Some(("range_check_tag_a", range_check_tag_a)))
+                .chain(range_check_b_lo)
+                .chain(range_check_b_hi)
+                .chain(Some(("word_check", word_check)))
+                .chain(Some(("rol_12_word_check", rol_12_word_check)))
+        )
+    }
+
+    // Gate for rotate_left(W, 13)
+    // word = (a,b,c) = (13, 3, 16) chunks
+    #[allow(clippy::too_many_arguments)]
+    pub fn rotate_left_13_gate(
+        s_rotate_left_13: Expression<F>,
+        a: Expression<F>,
+        tag_a: Expression<F>,
+        b: Expression<F>,
+        c: Expression<F>,
+        word_lo: Expression<F>,
+        word_hi: Expression<F>,
+        rol_13_word_lo: Expression<F>,
+        rol_13_word_hi: Expression<F>,
+    ) -> Constraints<
+        F,
+        (&'static str, Expression<F>),
+        impl Iterator<Item = (&'static str, Expression<F>)>,
+    > {
+        // Note: There is no need to check the tag of c as it will be constrained to be 16 bits 
+        // by the lookup table
+        let range_check_tag_a = Gate::range_check(tag_a, 0, 5); // tag <= 5 => a < 2^13
+        let range_check_b= Gate::three_bit_range(b.clone());
+
+        let word_check = a.clone()
+        + b.clone() * F::from(1 << 13)
+        + c.clone() * F::from(1 << 16)
+        + word_lo * (-F::one())
+        + word_hi * F::from(1 << 16) * (-F::one());
+
+        let rol_13_word_check = b
+        + c * F::from(1 << 3)
+        + a * F::from(1 << 19)
+        + rol_13_word_lo * (-F::one())
+        + rol_13_word_hi * F::from(1 << 16) * (-F::one());
+
+        Constraints::with_selector(
+            s_rotate_left_13,
+            std::iter::empty()
+                .chain(Some(("range_check_tag_a", range_check_tag_a)))
+                .chain(range_check_b)
+                .chain(Some(("word_check", word_check)))
+                .chain(Some(("rol_13_word_check", rol_13_word_check)))
+        )
+    }
+
+    // Gate for rotate_left(W, 14)
+    // word = (a,b,c) = (14, 2, 16) chunks
+    #[allow(clippy::too_many_arguments)]
+    pub fn rotate_left_14_gate(
+        s_rotate_left_14: Expression<F>,
+        a: Expression<F>,
+        tag_a: Expression<F>,
+        b: Expression<F>,
+        c: Expression<F>,
+        word_lo: Expression<F>,
+        word_hi: Expression<F>,
+        rol_14_word_lo: Expression<F>,
+        rol_14_word_hi: Expression<F>,
+    ) -> Constraints<
+        F,
+        (&'static str, Expression<F>),
+        impl Iterator<Item = (&'static str, Expression<F>)>,
+    > {
+        // Note: There is no need to check the tag of c as it will be constrained to be 16 bits 
+        // by the lookup table
+        let range_check_tag_a = Gate::range_check(tag_a, 0, 6); // tag <= 6 => a < 2^14
+        let range_check_b= Gate::two_bit_range(b.clone());
+
+        let word_check = a.clone()
+        + b.clone() * F::from(1 << 14)
+        + c.clone() * F::from(1 << 16)
+        + word_lo * (-F::one())
+        + word_hi * F::from(1 << 16) * (-F::one());
+
+        let rol_14_word_check = b
+        + c * F::from(1 << 2)
+        + a * F::from(1 << 18)
+        + rol_14_word_lo * (-F::one())
+        + rol_14_word_hi * F::from(1 << 16) * (-F::one());
+
+        Constraints::with_selector(
+            s_rotate_left_14,
+            std::iter::empty()
+                .chain(Some(("range_check_tag_a", range_check_tag_a)))
+                .chain(range_check_b)
+                .chain(Some(("word_check", word_check)))
+                .chain(Some(("rol_14_word_check", rol_14_word_check)))
+        )
+    }
+
+    // Gate for rotate_left(W, 14)
+    // word = (a,b,c) = (15, 1, 16) chunks
+    #[allow(clippy::too_many_arguments)]
+    pub fn rotate_left_15_gate(
+        s_rotate_left_15: Expression<F>,
+        a: Expression<F>,
+        tag_a: Expression<F>,
+        b: Expression<F>,
+        c: Expression<F>,
+        word_lo: Expression<F>,
+        word_hi: Expression<F>,
+        rol_15_word_lo: Expression<F>,
+        rol_15_word_hi: Expression<F>,
+    ) -> Constraints<
+        F,
+        (&'static str, Expression<F>),
+        impl Iterator<Item = (&'static str, Expression<F>)>,
+    > {
+        // Note: There is no need to check the tag of c as it will be constrained to be 16 bits 
+        // by the lookup table
+        let range_check_tag_a = Gate::range_check(tag_a, 0, 7); // tag <= 7 => a < 2^15
+        let range_check_b= Gate::range_check(b.clone(), 0, 1);
+
+        let word_check = a.clone()
+        + b.clone() * F::from(1 << 14)
+        + c.clone() * F::from(1 << 16)
+        + word_lo * (-F::one())
+        + word_hi * F::from(1 << 16) * (-F::one());
+
+        let rol_15_word_check = b
+        + c * F::from(1 << 2)
+        + a * F::from(1 << 18)
+        + rol_15_word_lo * (-F::one())
+        + rol_15_word_hi * F::from(1 << 16) * (-F::one());
+
+        Constraints::with_selector(
+            s_rotate_left_15,
+            std::iter::empty()
+                .chain(Some(("range_check_tag_a", range_check_tag_a)))
+                .chain(Some(("range_check_b", range_check_b)))
+                .chain(Some(("word_check", word_check)))
+                .chain(Some(("rol_15_word_check", rol_15_word_check)))
+        )
+    }
 }

@@ -4,7 +4,8 @@ Based on code from https://github.com/privacy-scaling-explorations/halo2/blob/8c
 
 use std::convert::TryInto;
 
-use super::{AssignedBits, BlockWord, SpreadInputs, /* Table16Assignment,*/ NUM_ADVICE_COLS};
+use super::gates::Gate;
+use super::{AssignedBits, BlockWord, SpreadInputs, Table16Assignment, NUM_ADVICE_COLS};
 use super::{BLOCK_SIZE, ROUNDS};
 use halo2::{
     circuit::Layouter,
@@ -18,8 +19,6 @@ mod schedule_util;
 //mod subregion1;
 //mod subregion2;
 //mod subregion3;
-
-use schedule_gates::ScheduleGate;
 
 
 #[derive(Clone, Debug)]
@@ -42,7 +41,7 @@ pub(super) struct MessageScheduleConfig {
     s_decompose_0: Selector,
 }
 
-//impl Table16Assignment for MessageScheduleConfig {}
+impl Table16Assignment for MessageScheduleConfig {}
 
 impl MessageScheduleConfig {
     /// Configures the message schedule.
@@ -71,7 +70,7 @@ impl MessageScheduleConfig {
             let hi = meta.query_advice(a_4, Rotation::cur());
             let word = meta.query_advice(a_5, Rotation::cur());
 
-            ScheduleGate::s_decompose_0(s_decompose_0, lo, hi, word)
+            Gate::s_decompose_0(s_decompose_0, lo, hi, word)
         });
 
         MessageScheduleConfig {
@@ -105,7 +104,7 @@ impl MessageScheduleConfig {
                 // Assign X[0..16]
                 for (row, word) in input.iter().enumerate() {
                     self.s_decompose_0.enable(&mut region, row)?;
-                    let (word, halves) = self.assign_word_and_halves(&mut region, word.0, row)?;
+                    let (word, halves) = self.assign_msgblk_word_and_halves(&mut region, word.0, row)?;
                     w.push(MessageWord(word));
                     w_halves.push(halves);
                 }

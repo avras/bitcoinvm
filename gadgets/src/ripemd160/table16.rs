@@ -204,3 +204,41 @@ impl AssignedBits<32> {
 }
 
 pub const NUM_ADVICE_COLS: usize = 3;
+
+/// Common assignment patterns used by Table16 regions.
+trait Table16Assignment {
+    fn assign_word_and_halves(
+        &self,
+        annotation: String,
+        region: &mut Region<'_, pallas::Base>,
+        lookup: &SpreadInputs,
+        a_3: Column<Advice>,
+        a_4: Column<Advice>,
+        a_5: Column<Advice>,
+        word: Value<u32>,
+        row: usize,
+    ) -> Result<(AssignedBits<32>, (AssignedBits<16>, AssignedBits<16>)), Error> {
+
+        let w_lo_val = word.map(|word| word as u16);
+        let w_lo_bvec: Value<[bool; 16]> = w_lo_val.map(|x| i2lebsp(x.into()));
+        let spread_w_lo = w_lo_bvec.map(SpreadWord::<16,32>::new);
+        let spread_w_lo = SpreadVar::with_lookup(region, &lookup, row, spread_w_lo)?;
+        spread_w_lo.dense.copy_advice(|| format!("{}_lo", annotation), region, a_3, row)?;
+
+        let w_hi_val = word.map(|word| (word >> 16) as u16);
+        let w_hi_bvec: Value<[bool; 16]> = w_hi_val.map(|x| i2lebsp(x.into()));
+        let spread_w_hi = w_hi_bvec.map(SpreadWord::<16,32>::new);
+        let spread_w_hi = SpreadVar::with_lookup(region, &lookup, row + 1, spread_w_hi)?;
+        spread_w_hi.dense.copy_advice(|| format!("{}_hi", annotation), region, a_4, row)?;
+
+        let w = AssignedBits::<32>::assign(
+            region,
+            || format!("{}", annotation),
+            a_5,
+            row,
+            word,
+        )?;
+
+        Ok((w, (spread_w_lo.dense, spread_w_hi.dense)))
+    }
+}

@@ -98,4 +98,15 @@ impl<F: FieldExt> Gate<F> {
             ("four_bit_range_check", Self::range_check(value.clone(), 0, (1 << 4) - 1))
         ))
     }
+
+    /// s_decompose_0 for all words
+    pub fn s_decompose_0(
+        s_decompose_0: Expression<F>,
+        lo: Expression<F>,
+        hi: Expression<F>,
+        word: Expression<F>,
+    ) -> Option<(&'static str, Expression<F>)> {
+        let check = lo + hi * F::from(1 << 16) - word;
+        Some(("s_decompose_0", s_decompose_0 * check))
+    }
 }

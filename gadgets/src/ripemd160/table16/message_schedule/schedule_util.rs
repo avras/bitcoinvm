@@ -1,4 +1,6 @@
-use crate::ripemd160::table16::{util::i2lebsp, spread_table::{SpreadWord, SpreadVar}};
+use std::fmt::format;
+
+use crate::ripemd160::table16::{util::i2lebsp, spread_table::{SpreadWord, SpreadVar}, Table16Assignment};
 
 use super::super::AssignedBits;
 use super::MessageScheduleConfig;
@@ -23,7 +25,7 @@ pub fn get_word_row(word_idx: usize) -> usize {
 
 impl MessageScheduleConfig {
     // Assign a word and its hi and lo halves
-    pub fn assign_word_and_halves(
+    pub fn assign_msgblk_word_and_halves(
         &self,
         region: &mut Region<'_, pallas::Base>,
         word: Value<u32>,
@@ -36,26 +38,37 @@ impl MessageScheduleConfig {
 
         let row = get_word_row(word_idx);
 
-        let x_lo_val = word.map(|word| word as u16);
-        let x_lo_bvec: Value<[bool; 16]> = x_lo_val.map(|x| i2lebsp(x.into()));
-        let spread_x_lo = x_lo_bvec.map(SpreadWord::<16,32>::new);
-        let spread_x_lo = SpreadVar::with_lookup(region, &self.lookup, row, spread_x_lo)?;
-        spread_x_lo.dense.copy_advice(|| format!("X_{}_lo", word_idx), region, a_3, row)?;
-
-        let x_hi_val = word.map(|word| (word >> 16) as u16);
-        let x_hi_bvec: Value<[bool; 16]> = x_hi_val.map(|x| i2lebsp(x.into()));
-        let spread_x_hi = x_hi_bvec.map(SpreadWord::<16,32>::new);
-        let spread_x_hi = SpreadVar::with_lookup(region, &self.lookup, row+1, spread_x_hi)?;
-        spread_x_hi.dense.copy_advice(|| format!("X_{}_hi", word_idx), region, a_4, row)?;
-
-        let word = AssignedBits::<32>::assign(
+        self.assign_word_and_halves(
+            format!("X_{}", row),
             region,
-            || format!("X_{}", word_idx),
+            &self.lookup,
+            a_3,
+            a_4,
             a_5,
-            row,
             word,
-        )?;
+            row
+        )
 
-        Ok((word, (spread_x_lo.dense, spread_x_hi.dense)))
+        // let x_lo_val = word.map(|word| word as u16);
+        // let x_lo_bvec: Value<[bool; 16]> = x_lo_val.map(|x| i2lebsp(x.into()));
+        // let spread_x_lo = x_lo_bvec.map(SpreadWord::<16,32>::new);
+        // let spread_x_lo = SpreadVar::with_lookup(region, &self.lookup, row, spread_x_lo)?;
+        // spread_x_lo.dense.copy_advice(|| format!("X_{}_lo", word_idx), region, a_3, row)?;
+
+        // let x_hi_val = word.map(|word| (word >> 16) as u16);
+        // let x_hi_bvec: Value<[bool; 16]> = x_hi_val.map(|x| i2lebsp(x.into()));
+        // let spread_x_hi = x_hi_bvec.map(SpreadWord::<16,32>::new);
+        // let spread_x_hi = SpreadVar::with_lookup(region, &self.lookup, row+1, spread_x_hi)?;
+        // spread_x_hi.dense.copy_advice(|| format!("X_{}_hi", word_idx), region, a_4, row)?;
+
+        // let word = AssignedBits::<32>::assign(
+        //     region,
+        //     || format!("X_{}", word_idx),
+        //     a_5,
+        //     row,
+        //     word,
+        // )?;
+
+        // Ok((word, (spread_x_lo.dense, spread_x_hi.dense)))
     }
 }

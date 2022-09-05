@@ -746,6 +746,7 @@ mod tests {
     use halo2::halo2curves::{pasta::Fp};
     use halo2::circuit::{SimpleFloorPlanner, Layouter, Region, Value};
     use halo2::dev::MockProver;
+    use rand::Rng;
 
     use crate::ripemd160::table16::{Table16Assignment, AssignedBits};
     use crate::ripemd160::table16::spread_table::{SpreadTableConfig, SpreadTableChip};
@@ -758,10 +759,10 @@ mod tests {
     }
 
     struct CompressionGateTester {
-        pub xor_b: u32,
-        pub xor_c: u32,
-        pub xor_d: u32,
-        pub xor_out: u32,
+        pub b: u32,
+        pub c: u32,
+        pub d: u32,
+        pub xor: u32,
     }
 
     impl Circuit<Fp> for CompressionGateTester {
@@ -770,10 +771,10 @@ mod tests {
 
         fn without_witnesses(&self) -> Self {
             CompressionGateTester {
-                xor_b: 0,
-                xor_c: 0,
-                xor_d: 0,
-                xor_out: 0,
+                b: 0,
+                c: 0,
+                d: 0,
+                xor: 0,
             }
         }
 
@@ -835,7 +836,7 @@ mod tests {
                          a_3,
                          a_4,
                          a_5,
-                         Value::known(self.xor_b),
+                         Value::known(self.b),
                          row,
                     )?;
                     row += 2;
@@ -848,7 +849,7 @@ mod tests {
                          a_3,
                          a_4,
                          a_5,
-                         Value::known(self.xor_c),
+                         Value::known(self.c),
                          row,
                     )?;
                     row += 2;
@@ -861,7 +862,7 @@ mod tests {
                          a_3,
                          a_4,
                          a_5,
-                         Value::known(self.xor_d),
+                         Value::known(self.d),
                          row,
                     )?;
                     row += 2;
@@ -887,7 +888,7 @@ mod tests {
                         || "xor_out",
                         a_5,
                         row,
-                        Value::known(self.xor_out),
+                        Value::known(self.xor),
                     )?;
 
                     xor_out_lo.copy_advice(|| "xor_out_lo", &mut region, a_3, row)?;
@@ -902,13 +903,14 @@ mod tests {
 
     #[test]
     fn test_gate_f1() {
-        let xor_b: u32 = 0x0101_0101;
-        let xor_c: u32 = 0x1010_1010;
-        let xor_d: u32 = 0x2222_2222;
-        let xor_out: u32 = 0x3333_3333;
+        let mut rng = rand::thread_rng();
+        let b: u32 = rng.gen();
+        let c: u32 = rng.gen();
+        let d: u32 = rng.gen();
+        let xor: u32 = b ^ c ^ d;
 
         let circuit = CompressionGateTester {
-            xor_b, xor_c, xor_d, xor_out
+            b, c, d, xor
         };
 
         let prover = MockProver::run(17, &circuit, vec![]).unwrap();

@@ -38,6 +38,7 @@ impl MessageScheduleConfig {
 
         let row = get_word_row(word_idx);
 
+        let (word, (spread_var_lo, spread_var_hi)) =
         self.assign_word_and_halves(
             format!("X_{}", row),
             region,
@@ -47,28 +48,8 @@ impl MessageScheduleConfig {
             a_5,
             word,
             row
-        )
+        )?;
 
-        // let x_lo_val = word.map(|word| word as u16);
-        // let x_lo_bvec: Value<[bool; 16]> = x_lo_val.map(|x| i2lebsp(x.into()));
-        // let spread_x_lo = x_lo_bvec.map(SpreadWord::<16,32>::new);
-        // let spread_x_lo = SpreadVar::with_lookup(region, &self.lookup, row, spread_x_lo)?;
-        // spread_x_lo.dense.copy_advice(|| format!("X_{}_lo", word_idx), region, a_3, row)?;
-
-        // let x_hi_val = word.map(|word| (word >> 16) as u16);
-        // let x_hi_bvec: Value<[bool; 16]> = x_hi_val.map(|x| i2lebsp(x.into()));
-        // let spread_x_hi = x_hi_bvec.map(SpreadWord::<16,32>::new);
-        // let spread_x_hi = SpreadVar::with_lookup(region, &self.lookup, row+1, spread_x_hi)?;
-        // spread_x_hi.dense.copy_advice(|| format!("X_{}_hi", word_idx), region, a_4, row)?;
-
-        // let word = AssignedBits::<32>::assign(
-        //     region,
-        //     || format!("X_{}", word_idx),
-        //     a_5,
-        //     row,
-        //     word,
-        // )?;
-
-        // Ok((word, (spread_x_lo.dense, spread_x_hi.dense)))
+        Ok((word, (spread_var_lo.dense, spread_var_hi.dense)))
     }
 }

@@ -217,7 +217,7 @@ trait Table16Assignment {
         a_5: Column<Advice>,
         word: Value<u32>,
         row: usize,
-    ) -> Result<(AssignedBits<32>, (AssignedBits<16>, AssignedBits<16>)), Error> {
+    ) -> Result<(AssignedBits<32>, (SpreadVar<16, 32>, SpreadVar<16,32>)), Error> {
 
         let w_lo_val = word.map(|word| word as u16);
         let w_lo_bvec: Value<[bool; 16]> = w_lo_val.map(|x| i2lebsp(x.into()));
@@ -239,6 +239,6 @@ trait Table16Assignment {
             word,
         )?;
 
-        Ok((w, (spread_w_lo.dense, spread_w_hi.dense)))
+        Ok((w, (spread_w_lo, spread_w_hi)))
     }
 }

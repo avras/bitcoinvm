@@ -1,7 +1,8 @@
 use super::super::{util::*, Gate};
 use halo2::{
     arithmetic::FieldExt,
-    plonk::{Constraint, Constraints, Expression},
+    circuit::Layouter,
+    plonk::{Constraint, Constraints, Expression, Error},
 };
 use std::marker::PhantomData;
 
@@ -15,7 +16,7 @@ impl<F: FieldExt> CompressionGate<F> {
     // Gate for B ^ C ^ D; XOR of three 32 bit words
     // Output is in spread_r0_even, spread_r1_even
     #[allow(clippy::too_many_arguments)]
-    fn f1_gate(
+    pub fn f1_gate(
         s_f1: Expression<F>,
         spread_r0_even: Expression<F>,
         spread_r0_odd: Expression<F>,
@@ -737,4 +738,181 @@ impl<F: FieldExt> CompressionGate<F> {
                 .chain(Some(("rol_15_word_check", rol_15_word_check)))
         )
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use halo2::plonk::{Circuit, ConstraintSystem, Error};
+    use halo2::halo2curves::{pasta::Fp};
+    use halo2::circuit::{SimpleFloorPlanner, Layouter, Region, Value};
+    use halo2::dev::MockProver;
+
+    use crate::ripemd160::table16::{Table16Assignment, AssignedBits};
+    use crate::ripemd160::table16::spread_table::{SpreadTableConfig, SpreadTableChip};
+    use crate::ripemd160::table16::compression::CompressionConfig;
+
+    #[derive(Debug, Clone)]
+    struct CompressionGateTesterConfig {
+        lookup: SpreadTableConfig,
+        compression: CompressionConfig,
+    }
+
+    struct CompressionGateTester {
+        pub xor_b: u32,
+        pub xor_c: u32,
+        pub xor_d: u32,
+        pub xor_out: u32,
+    }
+
+    impl Circuit<Fp> for CompressionGateTester {
+        type Config = CompressionGateTesterConfig;
+        type FloorPlanner = SimpleFloorPlanner;
+
+        fn without_witnesses(&self) -> Self {
+            CompressionGateTester {
+                xor_b: 0,
+                xor_c: 0,
+                xor_d: 0,
+                xor_out: 0,
+            }
+        }
+
+        fn configure(meta: &mut ConstraintSystem<Fp>) -> Self::Config {
+            let input_tag = meta.advice_column();
+            let input_dense = meta.advice_column();
+            let input_spread = meta.advice_column();
+            let advice= [
+                meta.advice_column(),
+                meta.advice_column(),
+                meta.advice_column()
+            ];
+            let s_decompose_0 = meta.selector();
+
+            let lookup = SpreadTableChip::configure(meta, input_tag, input_dense, input_spread);
+            let lookup_inputs = lookup.input.clone();
+
+            let _a_0 = lookup_inputs.tag;
+            let a_1 = lookup_inputs.dense;
+            let a_2 = lookup_inputs.spread;
+            let a_3 = advice[0];
+            let a_4 = advice[1];
+            let a_5 = advice[2];
+
+            // Add all advice columns to permutation
+            for column in [a_1, a_2, a_3, a_4, a_5 ].iter() {
+                meta.enable_equality(*column);
+            }
+            
+            let compression = CompressionConfig::configure(meta, lookup_inputs, advice, s_decompose_0);
+
+            Self::Config {
+                lookup,
+                compression,
+            }
+        }
+
+        fn synthesize(
+            &self,
+            config: Self::Config,
+            mut layouter: impl Layouter<Fp>
+        ) -> Result<(), Error> {
+            SpreadTableChip::load(config.lookup.clone(), &mut layouter)?;
+            
+            layouter.assign_region(
+                || "f1_gate testing",
+                |mut region: Region<Fp>| {
+                    let a_3 = config.compression.advice[0];
+                    let a_4 = config.compression.advice[1];
+                    let a_5 = config.compression.advice[2];
+
+                    let mut row = 0_usize;
+
+                    let (_, (spread_b_var_lo, spread_b_var_hi)) =
+                    config.compression.assign_word_and_halves(
+                         "b".to_string(),
+                         &mut region,
+                         &config.lookup.input,
+                         a_3,
+                         a_4,
+                         a_5,
+                         Value::known(self.xor_b),
+                         row,
+                    )?;
+                    row += 2;
+
+                    let (_, (spread_c_var_lo, spread_c_var_hi)) =
+                    config.compression.assign_word_and_halves(
+                         "c".to_string(),
+                         &mut region,
+                         &config.lookup.input,
+                         a_3,
+                         a_4,
+                         a_5,
+                         Value::known(self.xor_c),
+                         row,
+                    )?;
+                    row += 2;
+
+                    let (_, (spread_d_var_lo, spread_d_var_hi)) =
+                    config.compression.assign_word_and_halves(
+                         "d".to_string(),
+                         &mut region,
+                         &config.lookup.input,
+                         a_3,
+                         a_4,
+                         a_5,
+                         Value::known(self.xor_d),
+                         row,
+                    )?;
+                    row += 2;
+
+                    let spread_halves_b = (spread_b_var_lo.spread, spread_b_var_hi.spread);
+                    let spread_halves_c = (spread_c_var_lo.spread, spread_c_var_hi.spread);
+                    let spread_halves_d = (spread_d_var_lo.spread, spread_d_var_hi.spread);
+
+                    let (xor_out_lo, xor_out_hi) =
+                    config.compression.assign_f1(
+                        &mut region,
+                        row,
+                        spread_halves_b.into(), 
+                        spread_halves_c.into(),
+                        spread_halves_d.into()
+                    )?;
+                    row += 4; // f1 requires four rows
+
+                    config.compression.s_decompose_0.enable(&mut region, row)?;
+
+                    AssignedBits::<32>::assign(
+                        &mut region,
+                        || "xor_out",
+                        a_5,
+                        row,
+                        Value::known(self.xor_out),
+                    )?;
+
+                    xor_out_lo.copy_advice(|| "xor_out_lo", &mut region, a_3, row)?;
+                    xor_out_hi.copy_advice(|| "xor_out_hi", &mut region, a_4, row)?;
+
+                    Ok(())
+                }
+            )?;
+            Ok(())    
+        }
+    }
+
+    #[test]
+    fn test_gate_f1() {
+        let xor_b: u32 = 0x0101_0101;
+        let xor_c: u32 = 0x1010_1010;
+        let xor_d: u32 = 0x2222_2222;
+        let xor_out: u32 = 0x3333_3333;
+
+        let circuit = CompressionGateTester {
+            xor_b, xor_c, xor_d, xor_out
+        };
+
+        let prover = MockProver::run(17, &circuit, vec![]).unwrap();
+        prover.assert_satisfied();
+    }
+
 }

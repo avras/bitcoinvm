@@ -1,23 +1,136 @@
-/*
+use self::compression_gates::CompressionGate;
+
 use super::{
-    super::DIGEST_SIZE,
-    util::{i2lebsp, lebs2ip},
-    AssignedBits, BlockWord, SpreadInputs, SpreadVar, Table16Assignment, ROUNDS, STATE,
+    AssignedBits, BlockWord, SpreadInputs, SpreadVar, Table16Assignment, ROUNDS, DIGEST_SIZE, NUM_ADVICE_COLS,
 };
-use halo2_proofs::{
+use super::util::{i2lebsp, lebs2ip};
+use super::gates::Gate;
+use halo2::{
     circuit::{Layouter, Value},
     plonk::{Advice, Column, ConstraintSystem, Error, Selector},
     poly::Rotation,
 };
-use halo2curves::pasta::pallas;
+use halo2::halo2curves::pasta::pallas;
 use std::convert::TryInto;
 use std::ops::Range;
-*/
 
 mod compression_gates;
-// mod compression_util;
+mod compression_util;
 // mod subregion_digest;
 // mod subregion_initial;
 // mod subregion_main;
 
 // use compression_gates::CompressionGate;
+
+#[derive(Clone, Debug)]
+pub struct RoundWordDense(AssignedBits<16>, AssignedBits<16>);
+
+impl From<(AssignedBits<16>, AssignedBits<16>)> for RoundWordDense {
+    fn from(halves: (AssignedBits<16>, AssignedBits<16>)) -> Self {
+        Self(halves.0, halves.1)
+    }
+}
+
+impl RoundWordDense {
+    pub fn value(&self) -> Value<u32> {
+        self.0
+            .value_u16()
+            .zip(self.1.value_u16())
+            .map(|(lo, hi)| lo as u32 + (1 << 16) * hi as u32)
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct RoundWordSpread(AssignedBits<32>, AssignedBits<32>);
+
+impl From<(AssignedBits<32>, AssignedBits<32>)> for RoundWordSpread {
+    fn from(halves: (AssignedBits<32>, AssignedBits<32>)) -> Self {
+        Self(halves.0, halves.1)
+    }
+}
+
+impl RoundWordSpread {
+    pub fn value(&self) -> Value<u64> {
+        self.0
+            .value_u32()
+            .zip(self.1.value_u32())
+            .map(|(lo, hi)| lo as u64 + (1 << 32) * hi as u64)
+    }
+}
+
+#[derive(Clone, Debug)]
+pub(super) struct CompressionConfig {
+    lookup: SpreadInputs,
+    advice: [Column<Advice>; NUM_ADVICE_COLS],
+
+    s_decompose_0: Selector,
+    s_f1: Selector,
+}
+
+impl Table16Assignment for CompressionConfig {}
+
+impl CompressionConfig {
+    pub(super) fn configure(
+        meta: &mut ConstraintSystem<pallas::Base>,
+        lookup: SpreadInputs,
+        advice: [Column<Advice>; NUM_ADVICE_COLS],
+        s_decompose_0: Selector, 
+    ) -> Self {
+        let s_f1 = meta.selector();
+
+        // Rename these here for ease of matching the gates to the specification.
+        let a_0 = lookup.tag;
+        let a_1 = lookup.dense;
+        let a_2 = lookup.spread;
+        let a_3 = advice[0];
+        let a_4 = advice[1];
+        let a_5 = advice[2];
+
+        // s_decompose_0 for all words
+        meta.create_gate("s_decompose_0", |meta| {
+            let s_decompose_0 = meta.query_selector(s_decompose_0);
+            let lo = meta.query_advice(a_3, Rotation::cur());
+            let hi = meta.query_advice(a_4, Rotation::cur());
+            let word = meta.query_advice(a_5, Rotation::cur());
+
+            Gate::s_decompose_0(s_decompose_0, lo, hi, word)
+        });
+
+        // s_f1 on b, c, d words
+        meta.create_gate("s_f1", |meta| {
+            let s_f1 = meta.query_selector(s_f1);
+            let spread_r0_even = meta.query_advice(a_2, Rotation(0));
+            let spread_r0_odd  = meta.query_advice(a_2, Rotation(1));
+            let spread_r1_even = meta.query_advice(a_2, Rotation(2));
+            let spread_r1_odd  = meta.query_advice(a_2, Rotation(3));
+            let spread_b_lo = meta.query_advice(a_3, Rotation::cur());
+            let spread_b_hi = meta.query_advice(a_3, Rotation::next());
+            let spread_c_lo = meta.query_advice(a_4, Rotation::cur());
+            let spread_c_hi = meta.query_advice(a_4, Rotation::next());
+            let spread_d_lo = meta.query_advice(a_5, Rotation::cur());
+            let spread_d_hi = meta.query_advice(a_5, Rotation::next());
+            
+            CompressionGate::f1_gate(
+                s_f1,
+                spread_r0_even,
+                spread_r0_odd,
+                spread_r1_even,
+                spread_r1_odd,
+                spread_b_lo,
+                spread_b_hi,
+                spread_c_lo,
+                spread_c_hi,
+                spread_d_lo,
+                spread_d_hi
+            )
+        });
+
+        CompressionConfig {
+            lookup,
+            advice,
+            s_decompose_0,
+            s_f1 
+        }
+    }
+    
+}

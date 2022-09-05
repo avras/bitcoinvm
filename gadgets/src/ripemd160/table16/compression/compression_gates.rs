@@ -763,6 +763,8 @@ mod tests {
         pub c: u32,
         pub d: u32,
         pub xor: u32,
+        pub b_and_c: u32,
+        pub neg_b_and_d: u32,
     }
 
     impl Circuit<Fp> for CompressionGateTester {
@@ -775,6 +777,8 @@ mod tests {
                 c: 0,
                 d: 0,
                 xor: 0,
+                b_and_c: 0,
+                neg_b_and_d: 0,
             }
         }
 
@@ -820,7 +824,7 @@ mod tests {
             SpreadTableChip::load(config.lookup.clone(), &mut layouter)?;
             
             layouter.assign_region(
-                || "f1_gate testing",
+                || "compression_gate testing",
                 |mut region: Region<Fp>| {
                     let a_3 = config.compression.advice[0];
                     let a_4 = config.compression.advice[1];
@@ -871,13 +875,14 @@ mod tests {
                     let spread_halves_c = (spread_c_var_lo.spread, spread_c_var_hi.spread);
                     let spread_halves_d = (spread_d_var_lo.spread, spread_d_var_hi.spread);
 
+                    // Testing f1_gate
                     let (xor_out_lo, xor_out_hi) =
                     config.compression.assign_f1(
                         &mut region,
                         row,
-                        spread_halves_b.into(), 
-                        spread_halves_c.into(),
-                        spread_halves_d.into()
+                        spread_halves_b.clone().into(), 
+                        spread_halves_c.clone().into(),
+                        spread_halves_d.clone().into()
                     )?;
                     row += 4; // f1 requires four rows
 
@@ -894,6 +899,59 @@ mod tests {
                     xor_out_lo.copy_advice(|| "xor_out_lo", &mut region, a_3, row)?;
                     xor_out_hi.copy_advice(|| "xor_out_hi", &mut region, a_4, row)?;
 
+                    // Testing ch_gate
+                    row += 1;
+                    let (b_and_c_lo, b_and_c_hi) =
+                    config.compression.assign_ch(
+                        &mut region,
+                        row,
+                        spread_halves_b.clone().into(), 
+                        spread_halves_c.into(),
+                    )?;
+                    row += 4; // ch requires four rows
+
+                    config.compression.s_decompose_0.enable(&mut region, row)?;
+
+                    AssignedBits::<32>::assign(
+                        &mut region,
+                        || "b_and_c",
+                        a_5,
+                        row,
+                        Value::known(self.b_and_c),
+                    )?;
+
+                    b_and_c_lo.copy_advice(|| "b_and_c_lo", &mut region, a_3, row)?;
+                    b_and_c_hi.copy_advice(|| "b_and_c_hi", &mut region, a_4, row)?;
+                    row += 1;
+
+
+                    // Testing ch_neg_gate
+                    let (neg_b_and_c_lo, neg_b_and_c_hi) =
+                    config.compression.assign_ch_neg(
+                        &mut region,
+                        row,
+                        spread_halves_b.into(), 
+                        spread_halves_d.into(),
+                    )?;
+                    row += 4; // ch requires four rows
+
+
+                    config.compression.s_decompose_0.enable(&mut region, row)?;
+
+                    AssignedBits::<32>::assign(
+                        &mut region,
+                        || "neg_b_and_d",
+                        a_5,
+                        row,
+                        Value::known(self.neg_b_and_d),
+                    )?;
+
+                    neg_b_and_c_lo.copy_advice(|| "b_and_c_lo", &mut region, a_3, row)?;
+                    neg_b_and_c_hi.copy_advice(|| "b_and_c_hi", &mut region, a_4, row)?;
+                    //row += 1;
+
+
+
                     Ok(())
                 }
             )?;
@@ -902,15 +960,17 @@ mod tests {
     }
 
     #[test]
-    fn test_gate_f1() {
+    fn test_gates() {
         let mut rng = rand::thread_rng();
         let b: u32 = rng.gen();
         let c: u32 = rng.gen();
         let d: u32 = rng.gen();
         let xor: u32 = b ^ c ^ d;
+        let b_and_c: u32 = b & c;
+        let neg_b_and_d: u32 = !b & d;
 
         let circuit = CompressionGateTester {
-            b, c, d, xor
+            b, c, d, xor, b_and_c, neg_b_and_d
         };
 
         let prover = MockProver::run(17, &circuit, vec![]).unwrap();

@@ -1,4 +1,4 @@
-use crate::ripemd160::table16::{AssignedBits};
+use crate::ripemd160::table16::AssignedBits;
 use crate::ripemd160::table16::spread_table::{SpreadInputs, SpreadVar, SpreadWord};
 use crate::ripemd160::table16::util::{i2lebsp, even_bits, odd_bits, lebs2ip, negate_spread};
 
@@ -227,6 +227,126 @@ impl CompressionConfig {
         Ok(odd)
     }
 
+    // s_or_not_xor | a_0 |   a_1       |       a_2         |    a_3          |    a_4      |    a_5      |
+    //   1          |     | sum_0_even  | spread_sum_0_even | spread_neg_Y_lo | spread_X_lo | spread_Y_lo | 
+    //              |     | sum_0_odd   | spread_sum_0_odd  | spread_neg_Y_hi | spread_X_hi | spread_Y_hi | 
+    //              |     | sum_1_even  | spread_sum_1_even |                 |             |             | 
+    //              |     | sum_1_odd   | spread_sum_1_odd  |                 |             |             | 
+    //              |     | or_lo       | spread_or_lo      | spread_Z_lo     |             |             | 
+    //              |     | or_hi       | spread_or_hi      | spread_Z_hi     |             |             | 
+    //              |     | R_0_even    |                   |                 |             |             | 
+    //              |     | R_0_odd     |                   |                 |             |             | 
+    //              |     | R_1_even    |                   |                 |             |             | 
+    //              |     | R_1_odd     |                   |                 |             |             | 
+    //
+    pub(super) fn assign_or_not_xor(
+        &self,
+        region: &mut Region<'_, pallas::Base>,
+        row: usize,
+        spread_halves_x: RoundWordSpread,
+        spread_halves_y: RoundWordSpread,
+        spread_halves_z: RoundWordSpread,
+    ) -> Result<(AssignedBits<16>, AssignedBits<16>), Error> {
+        let a_3 = self.advice[0];
+        let a_4 = self.advice[1];
+        let a_5 = self.advice[2];
+
+        self.s_or_not_xor.enable(region, row)?;
+
+        // Assign and copy spread_x_lo, spread_x_hi
+        spread_halves_x.0.copy_advice(|| "spread_x_lo", region, a_4, row)?;
+        spread_halves_x.1.copy_advice(|| "spread_x_hi", region, a_4, row + 1)?;
+
+        // Assign and copy spread_y_lo, spread_y_hi
+        spread_halves_y.0.copy_advice(|| "spread_y_lo", region, a_5, row)?;
+        spread_halves_y.1.copy_advice(|| "spread_y_hi", region, a_5, row + 1)?;
+
+        // Assign and copy spread_z_lo, spread_z_hi
+        spread_halves_z.0.copy_advice(|| "spread_z_lo", region, a_3, row + 4)?;
+        spread_halves_z.1.copy_advice(|| "spread_z_hi", region, a_3, row + 5)?;
+
+        // Calculate neg_y_lo
+        let spread_neg_y_lo = spread_halves_y
+            .0
+            .value()
+            .map(|spread_y_lo| negate_spread(spread_y_lo.0));
+        // Assign spread_neg_y_lo
+        let assigned_neg_y_lo = AssignedBits::<32>::assign_bits(
+            region,
+            || "spread_neg_y_lo",
+            a_3,
+            row,
+            spread_neg_y_lo,
+        )?;
+
+        // Calculate neg_y_hi
+        let spread_neg_y_hi = spread_halves_y
+            .1
+            .value()
+            .map(|spread_y_hi| negate_spread(spread_y_hi.0));
+        // Assign spread_neg_y_hi
+       let assigned_neg_y_hi = AssignedBits::<32>::assign_bits(
+            region,
+            || "spread_neg_y_hi",
+            a_3,
+            row + 1,
+            spread_neg_y_hi,
+        )?;
+        let spread_halves_neg_y = RoundWordSpread::from((assigned_neg_y_lo, assigned_neg_y_hi));
+
+        let sum: Value<[bool; 64]> = spread_halves_x
+            .value()
+            .zip(spread_halves_neg_y.value())
+            .map(|(e, f)| i2lebsp(e + f));
+
+        let sum_0: Value<[bool; 32]> = sum.map(|q| q[..32].try_into().unwrap());
+        let sum_0_even = sum_0.map(even_bits);
+        let sum_0_odd = sum_0.map(odd_bits);
+
+        let sum_1: Value<[bool; 32]> = sum.map(|q| q[32..].try_into().unwrap());
+        let sum_1_even = sum_1.map(even_bits);
+        let sum_1_odd = sum_1.map(odd_bits);
+
+        self.assign_spread_outputs(region, &self.lookup, row, sum_0_even, sum_0_odd, sum_1_even, sum_1_odd)?;
+
+        let or: Value<[bool; 64]> =
+            spread_halves_x.value()
+                .zip(spread_halves_neg_y.value())
+                .map(|(a, b)| a | b)
+                .map(i2lebsp);
+
+        let or_lo = or.map(|q| q[..32].try_into().unwrap()).map(even_bits::<32, 16>);
+        let or_hi = or.map(|q| q[32..].try_into().unwrap()).map(even_bits::<32, 16>);
+
+        self.assign_spread_word(region, &self.lookup, row + 4, or_lo, or_hi)?;
+
+        let or_not_xor = or
+            .map(|a| lebs2ip::<64>(&a))
+            .zip(spread_halves_z.value())
+            .map(|(a,b)| a + b)
+            .map(i2lebsp::<64>);
+
+        let or_not_xor_0: Value<[bool; 32]> = or_not_xor.map(|q| q[..32].try_into().unwrap());
+        let or_not_xor_0_even = or_not_xor_0.map(even_bits);
+        let or_not_xor_0_odd = or_not_xor_0.map(odd_bits);
+
+        let or_not_xor_1: Value<[bool; 32]> = or_not_xor.map(|q| q[32..].try_into().unwrap());
+        let or_not_xor_1_even = or_not_xor_1.map(even_bits);
+        let or_not_xor_1_odd = or_not_xor_1.map(odd_bits);
+
+        let (even, _odd) = self.assign_spread_outputs(
+            region,
+            &self.lookup,
+            row + 6,
+            or_not_xor_0_even,
+            or_not_xor_0_odd,
+            or_not_xor_1_even,
+            or_not_xor_1_odd
+        )?;
+
+        Ok(even)
+    }
+
     //          | a_0 |   a_1    |       a_2       |
     // row      |     | R_0_even | spread_R_0_even | 
     // row + 1  |     | R_0_odd  | spread_R_0_odd  | 
@@ -280,6 +400,47 @@ impl CompressionConfig {
         Ok((
             (r_0_even.dense, r_1_even.dense),
             (r_0_odd.dense, r_1_odd.dense),
+        ))
+    }
+
+    //          | a_0 | a_1    |     a_2     |
+    // row      |     | R_0    | spread_R_0  | 
+    // row + 1  |     | R_1    | spread_R_1  | 
+    // 
+    #[allow(clippy::too_many_arguments)]
+    #[allow(clippy::type_complexity)]
+    fn assign_spread_word(
+        &self,
+        region: &mut Region<'_, pallas::Base>,
+        lookup: &SpreadInputs,
+        row: usize,
+        r_lo: Value<[bool; 16]>,
+        r_hi: Value<[bool; 16]>,
+    ) -> Result<
+        (
+            (AssignedBits<16>, AssignedBits<16>),
+            (AssignedBits<32>, AssignedBits<32>),
+        ),
+            Error,
+    > 
+    {
+        // Lookup R_lo, R_hi
+        let r_lo_var = SpreadVar::with_lookup(
+            region,
+            lookup,
+            row,
+            r_lo.map(SpreadWord::<16, 32>::new),
+        )?;
+        let r_hi_var = SpreadVar::with_lookup(
+            region,
+            lookup,
+            row + 1,
+            r_hi.map(SpreadWord::<16, 32>::new),
+        )?;
+
+        Ok((
+            (r_lo_var.dense, r_hi_var.dense),
+            (r_lo_var.spread, r_hi_var.spread),
         ))
     }
 

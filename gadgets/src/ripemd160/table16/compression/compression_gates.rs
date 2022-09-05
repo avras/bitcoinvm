@@ -14,7 +14,7 @@ impl<F: FieldExt> CompressionGate<F> {
     }
 
     // Gate for B ^ C ^ D; XOR of three 32 bit words
-    // Output is in spread_r0_even, spread_r1_even
+    // Output is in r0_even, r1_even
     #[allow(clippy::too_many_arguments)]
     pub fn f1_gate(
         s_f1: Expression<F>,
@@ -47,7 +47,7 @@ impl<F: FieldExt> CompressionGate<F> {
     // f4(B, C, D) = (B & D) | (C & !D)
     // Note: We don't implement separate gates for f2 and f4 as their
     // output can be rolled into the calculation of T in each round
-    // Output is in spread_p0_odd, spread_p1_odd
+    // Output is in p0_odd, p1_odd
     #[allow(clippy::too_many_arguments)]
     pub fn ch_gate(
         s_ch: Expression<F>,
@@ -79,7 +79,7 @@ impl<F: FieldExt> CompressionGate<F> {
     // f4(B, C, D) = (B & D) | (C & !D)
     // Note: We don't implement separate gates for f2 and f4 as their
     // output can be rolled into the calculation of T in each round
-    // Output is in spread_q0_odd, spread_q1_odd
+    // Output is in q0_odd, q1_odd
     #[allow(clippy::too_many_arguments)]
     pub fn ch_neg_gate(
         s_ch_neg: Expression<F>,
@@ -125,7 +125,7 @@ impl<F: FieldExt> CompressionGate<F> {
     // Used in both f3 and f5
     // f3(X, Y, Z) = (X | !Y ) ^ Z
     // f5(X, Y, Z) = X ^ (Y | !Z)
-    // Output is in spread_r0_even, spread_r1_even
+    // Output is in r0_even, r1_even
     #[allow(clippy::too_many_arguments)]
     pub fn or_not_xor_gate(
         s_or_not_xor: Expression<F>,
@@ -765,6 +765,7 @@ mod tests {
         pub xor: u32,
         pub b_and_c: u32,
         pub neg_b_and_d: u32,
+        pub b_or_neg_c_xor_d: u32,
     }
 
     impl Circuit<Fp> for CompressionGateTester {
@@ -779,6 +780,7 @@ mod tests {
                 xor: 0,
                 b_and_c: 0,
                 neg_b_and_d: 0,
+                b_or_neg_c_xor_d: 0,
             }
         }
 
@@ -845,6 +847,7 @@ mod tests {
                     )?;
                     row += 2;
 
+                    // row = 2
                     let (_, (spread_c_var_lo, spread_c_var_hi)) =
                     config.compression.assign_word_and_halves(
                          "c".to_string(),
@@ -858,6 +861,7 @@ mod tests {
                     )?;
                     row += 2;
 
+                    // row = 4
                     let (_, (spread_d_var_lo, spread_d_var_hi)) =
                     config.compression.assign_word_and_halves(
                          "d".to_string(),
@@ -875,6 +879,7 @@ mod tests {
                     let spread_halves_c = (spread_c_var_lo.spread, spread_c_var_hi.spread);
                     let spread_halves_d = (spread_d_var_lo.spread, spread_d_var_hi.spread);
 
+                    // row = 6
                     // Testing f1_gate
                     let (xor_out_lo, xor_out_hi) =
                     config.compression.assign_f1(
@@ -888,6 +893,7 @@ mod tests {
 
                     config.compression.s_decompose_0.enable(&mut region, row)?;
 
+                    // row = 10
                     AssignedBits::<32>::assign(
                         &mut region,
                         || "xor_out",
@@ -901,15 +907,17 @@ mod tests {
 
                     // Testing ch_gate
                     row += 1;
+                    // row = 11
                     let (b_and_c_lo, b_and_c_hi) =
                     config.compression.assign_ch(
                         &mut region,
                         row,
                         spread_halves_b.clone().into(), 
-                        spread_halves_c.into(),
+                        spread_halves_c.clone().into(),
                     )?;
                     row += 4; // ch requires four rows
 
+                    // row = 15
                     config.compression.s_decompose_0.enable(&mut region, row)?;
 
                     AssignedBits::<32>::assign(
@@ -925,17 +933,19 @@ mod tests {
                     row += 1;
 
 
+                    // row = 16
                     // Testing ch_neg_gate
                     let (neg_b_and_c_lo, neg_b_and_c_hi) =
                     config.compression.assign_ch_neg(
                         &mut region,
                         row,
-                        spread_halves_b.into(), 
-                        spread_halves_d.into(),
+                        spread_halves_b.clone().into(), 
+                        spread_halves_d.clone().into(),
                     )?;
                     row += 4; // ch requires four rows
 
 
+                    // row = 20
                     config.compression.s_decompose_0.enable(&mut region, row)?;
 
                     AssignedBits::<32>::assign(
@@ -948,9 +958,34 @@ mod tests {
 
                     neg_b_and_c_lo.copy_advice(|| "b_and_c_lo", &mut region, a_3, row)?;
                     neg_b_and_c_hi.copy_advice(|| "b_and_c_hi", &mut region, a_4, row)?;
-                    //row += 1;
+                    row += 1;
+
+                    // row = 21
+                    // Testing or_not_xor gate
+                    let (b_or_neg_c_xor_d_lo, b_or_neg_c_xor_d_hi) =
+                    config.compression.assign_or_not_xor(
+                        &mut region,
+                        row,
+                        spread_halves_b.into(), 
+                        spread_halves_c.into(), 
+                        spread_halves_d.into(),
+                    )?;
+                    row += 10; // or_not_xor requires ten rows
 
 
+                    // row = 31
+                    config.compression.s_decompose_0.enable(&mut region, row)?;
+
+                    AssignedBits::<32>::assign(
+                        &mut region,
+                        || "b_or_neg_c_xor_d",
+                        a_5,
+                        row,
+                        Value::known(self.b_or_neg_c_xor_d),
+                    )?;
+
+                    b_or_neg_c_xor_d_lo.copy_advice(|| "b_or_neg_c_xor_d_lo", &mut region, a_3, row)?;
+                    b_or_neg_c_xor_d_hi.copy_advice(|| "b_or_neg_c_xor_d_hi", &mut region, a_4, row)?;
 
                     Ok(())
                 }
@@ -968,9 +1003,10 @@ mod tests {
         let xor: u32 = b ^ c ^ d;
         let b_and_c: u32 = b & c;
         let neg_b_and_d: u32 = !b & d;
+        let b_or_neg_c_xor_d: u32 = (b | !c) ^ d;
 
         let circuit = CompressionGateTester {
-            b, c, d, xor, b_and_c, neg_b_and_d
+            b, c, d, xor, b_and_c, neg_b_and_d, b_or_neg_c_xor_d,
         };
 
         let prover = MockProver::run(17, &circuit, vec![]).unwrap();

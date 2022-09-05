@@ -67,6 +67,7 @@ pub(super) struct CompressionConfig {
     s_f1: Selector,
     s_ch: Selector,
     s_ch_neg: Selector,
+    s_or_not_xor: Selector,
 }
 
 impl Table16Assignment for CompressionConfig {}
@@ -81,6 +82,7 @@ impl CompressionConfig {
         let s_f1 = meta.selector();
         let s_ch = meta.selector();
         let s_ch_neg = meta.selector();
+        let s_or_not_xor = meta.selector();
 
         // Rename these here for ease of matching the gates to the specification.
         let a_0 = lookup.tag;
@@ -184,6 +186,51 @@ impl CompressionConfig {
             )
         });
 
+        // s_or_not_xor on b, c, d words
+        // (b | !c) ^ d
+        meta.create_gate("s_or_not_xor", |meta| {
+            let s_or_not_xor = meta.query_selector(s_or_not_xor);
+            let spread_sum0_even = meta.query_advice(a_2, Rotation(0));
+            let spread_sum0_odd  = meta.query_advice(a_2, Rotation(1));
+            let spread_sum1_even = meta.query_advice(a_2, Rotation(2));
+            let spread_sum1_odd  = meta.query_advice(a_2, Rotation(3));
+            let spread_or_lo = meta.query_advice(a_2, Rotation(4));
+            let spread_or_hi = meta.query_advice(a_2, Rotation(5));
+            let spread_r0_even = meta.query_advice(a_2, Rotation(6));
+            let spread_r0_odd  = meta.query_advice(a_2, Rotation(7));
+            let spread_r1_even = meta.query_advice(a_2, Rotation(8));
+            let spread_r1_odd  = meta.query_advice(a_2, Rotation(9));
+            let spread_c_neg_lo = meta.query_advice(a_3, Rotation::cur());
+            let spread_c_neg_hi = meta.query_advice(a_3, Rotation::next());
+            let spread_b_lo = meta.query_advice(a_4, Rotation::cur());
+            let spread_b_hi = meta.query_advice(a_4, Rotation::next());
+            let spread_c_lo = meta.query_advice(a_5, Rotation::cur());
+            let spread_c_hi = meta.query_advice(a_5, Rotation::next());
+            let spread_d_lo = meta.query_advice(a_3, Rotation(4));
+            let spread_d_hi = meta.query_advice(a_3, Rotation(5));
+            
+            CompressionGate::or_not_xor_gate(
+                s_or_not_xor,
+                spread_r0_even,
+                spread_r0_odd,
+                spread_r1_even,
+                spread_r1_odd,
+                spread_or_lo,
+                spread_or_hi,
+                spread_sum0_even,
+                spread_sum0_odd,
+                spread_sum1_even,
+                spread_sum1_odd,
+                spread_b_lo,
+                spread_b_hi,
+                spread_c_lo,
+                spread_c_hi,
+                spread_c_neg_lo,
+                spread_c_neg_hi,
+                spread_d_lo,
+                spread_d_hi,
+            )
+        });
 
         CompressionConfig {
             lookup,
@@ -192,6 +239,7 @@ impl CompressionConfig {
             s_f1,
             s_ch,
             s_ch_neg,
+            s_or_not_xor
         }
     }
     

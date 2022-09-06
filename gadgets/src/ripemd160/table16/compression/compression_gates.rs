@@ -229,17 +229,17 @@ impl<F: FieldExt> CompressionGate<F> {
         let range_check_a_lo = Gate::two_bit_range(a_lo.clone());
         let range_check_a_hi = Gate::three_bit_range(a_hi.clone());
 
-        let word_check = a_lo.clone()
-        + a_hi.clone() * F::from(1 << 2)
-        + b.clone() * F::from(1 << 5)
-        + c.clone() * F::from(1 << 16)
+        let word_check = c.clone()
+        + b.clone() * F::from(1 << 16)
+        + a_lo.clone() * F::from(1 << 27)
+        + a_hi.clone() * F::from(1 << 29)
         + word_lo * (-F::one())
         + word_hi * F::from(1 << 16) * (-F::one());
 
-        let rol_5_word_check = b
-        + c * F::from(1 << 11)
-        + a_lo * F::from(1 << 27)
-        + a_hi * F::from(1 << 29)
+        let rol_5_word_check = a_lo
+        + a_hi * F::from(1 << 2)
+        + c * F::from(1 << 5)
+        + b * F::from(1 << 21)
         + rol_5_word_lo * (-F::one())
         + rol_5_word_hi * F::from(1 << 16) * (-F::one());
 
@@ -1036,8 +1036,6 @@ mod tests {
         let neg_b_and_d: u32 = !b & d;
         let b_or_neg_c_xor_d: u32 = (b | !c) ^ d;
         let rol_5_b: u32 = rol(b, 5);
-        println!("{:#08x}", b);
-        println!("{:#08x}", rol_5_b);
 
         let circuit = CompressionGateTester {
             b, c, d, xor, b_and_c, neg_b_and_d, b_or_neg_c_xor_d, rol_5_b,

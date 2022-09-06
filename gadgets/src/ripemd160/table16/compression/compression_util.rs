@@ -1,8 +1,9 @@
+use crate::ripemd160::ref_impl::helper_functions::rol;
 use crate::ripemd160::table16::AssignedBits;
 use crate::ripemd160::table16::spread_table::{SpreadInputs, SpreadVar, SpreadWord};
 use crate::ripemd160::table16::util::{i2lebsp, even_bits, odd_bits, lebs2ip, negate_spread};
 
-use super::{CompressionConfig, RoundWordSpread};
+use super::{CompressionConfig, RoundWordSpread, RoundWordDense};
 
 use halo2::{
     circuit::{Region, Value},
@@ -345,6 +346,77 @@ impl CompressionConfig {
         )?;
 
         Ok(even)
+    }
+
+    // For shift = 5..9
+    // s_rotate_left | a_0 |   a_1       | a_2 |  a_3 |    a_4  |    a_5      |
+    //   1           |     | b(16-shift) |     | a_lo | word_lo | rol_word_lo | 
+    //               |     | c(16)       |     | a_hi | word_hi | rol_word_hi | 
+    // OR 
+    // For shift = 9..13
+    // s_rotate_left | a_0 |   a_1    | a_2 |  a_3 |    a_4  |    a_5      |
+    //   1           |     | a(shift) |     | b_lo | word_lo | rol_word_lo | 
+    //               |     | c(16)    |     | b_hi | word_hi | rol_word_hi | 
+    // OR 
+    // For shift = 13..16
+    // s_rotate_left | a_0 |   a_1    | a_2 |  a_3 |    a_4  |    a_5      |
+    //   1           |     | a(shift) |     |   b  | word_lo | rol_word_lo | 
+    //               |     | c(16)    |     |      | word_hi | rol_word_hi | 
+    pub(super) fn assign_rotate_left(
+        &self,
+        region: &mut Region<'_, pallas::Base>,
+        row: usize,
+        word: RoundWordDense,
+        shift: u8,
+    ) -> Result<(AssignedBits<16>, AssignedBits<16>), Error> {
+        let a_3 = self.advice[0];
+        let a_4 = self.advice[1];
+        let a_5 = self.advice[2];
+        
+        self.s_rotate_left[shift as usize - 5].enable(region, row)?;
+
+        // Assign and copy word_lo, word_hi
+        word.0.copy_advice(|| "word_lo", region, a_4, row)?;
+        word.1.copy_advice(|| "word_hi", region, a_4, row + 1)?;
+        
+        let rol_word = word.value().map(|w| rol(w, shift)).map(|a| i2lebsp::<32>(a.into()));
+
+        let rol_word_lo: Value<[bool; 16]> = rol_word.map(|q| q[..16].try_into().unwrap());
+        let rol_word_hi: Value<[bool; 16]> = rol_word.map(|q| q[16..].try_into().unwrap());
+        
+        let rol_word_lo = AssignedBits::<16>::assign_bits(region, || "rol_word_lo", a_5, row, rol_word_lo)?;
+        let rol_word_hi = AssignedBits::<16>::assign_bits(region, || "rol_word_hi", a_5, row + 1, rol_word_hi)?;
+
+        assert!(shift > 4 && shift < 16);
+        let c: Value<[bool; 16]>= word.1.value_u16().map(|a| i2lebsp(a.into()).try_into().unwrap());
+        let a_or_b: Value<[bool; 16]> = if shift < 9 {
+            let mask: u16 = (1 << (16 - shift)) - 1;
+            // Extracting b
+            rol_word_lo.value_u16().map(|x| x & mask)
+                .map(|x| i2lebsp(x.into()).try_into().unwrap())
+        }
+        else {
+            let mask: u16 = (1 << shift) - 1;
+            // Extracting a
+            rol_word_hi.value_u16().map(|x| x & mask)
+                .map(|x| i2lebsp(x.into()).try_into().unwrap())
+        };
+        self.assign_spread_word(region, &self.lookup, row, a_or_b, c)?;
+
+        if shift == 5 {
+            let mask: u16 = (1 << shift) - 1;
+            let lsb5: Value<[bool; 16]> = rol_word_hi
+                .value_u16().map(|x| x & mask)
+                .map(|x| i2lebsp(x.into()).try_into().unwrap());
+            
+            let lsb2: Value<[bool; 2]> = lsb5.map(|q| q[3..5].try_into().unwrap());
+            let msb3: Value<[bool; 3]> = lsb5.map(|q| q[0..3].try_into().unwrap());
+
+            AssignedBits::<2>::assign_bits(region, || "a_lo(2)", a_3, row, lsb2)?;
+            AssignedBits::<3>::assign_bits(region, || "a_hi(3)", a_3, row + 1, msb3)?;
+        };
+
+        Ok((rol_word_lo, rol_word_hi))
     }
 
     //          | a_0 |   a_1    |       a_2       |

@@ -748,9 +748,10 @@ mod tests {
     use halo2::dev::MockProver;
     use rand::Rng;
 
+    use crate::ripemd160::ref_impl::helper_functions::rol;
     use crate::ripemd160::table16::{Table16Assignment, AssignedBits};
     use crate::ripemd160::table16::spread_table::{SpreadTableConfig, SpreadTableChip};
-    use crate::ripemd160::table16::compression::CompressionConfig;
+    use crate::ripemd160::table16::compression::{CompressionConfig, RoundWordDense};
 
     #[derive(Debug, Clone)]
     struct CompressionGateTesterConfig {
@@ -766,6 +767,7 @@ mod tests {
         pub b_and_c: u32,
         pub neg_b_and_d: u32,
         pub b_or_neg_c_xor_d: u32,
+        pub rol_5_b: u32,
     }
 
     impl Circuit<Fp> for CompressionGateTester {
@@ -781,6 +783,7 @@ mod tests {
                 b_and_c: 0,
                 neg_b_and_d: 0,
                 b_or_neg_c_xor_d: 0,
+                rol_5_b: 0,
             }
         }
 
@@ -986,6 +989,34 @@ mod tests {
 
                     b_or_neg_c_xor_d_lo.copy_advice(|| "b_or_neg_c_xor_d_lo", &mut region, a_3, row)?;
                     b_or_neg_c_xor_d_hi.copy_advice(|| "b_or_neg_c_xor_d_hi", &mut region, a_4, row)?;
+                    row += 1;
+
+                    // row = 32
+                    // Testing rotate_left_5 gate
+                    let b_round_word_dense =
+                        RoundWordDense(spread_b_var_lo.dense, spread_b_var_hi.dense);
+                    let (rol_5_b_lo, rol_5_b_hi) =
+                    config.compression.assign_rotate_left(
+                        &mut region,
+                        row,
+                        b_round_word_dense,
+                        5
+                    )?;
+                    row += 2; // rotate_left_5 requires two rows
+
+                    // row = 34
+                    config.compression.s_decompose_0.enable(&mut region, row)?;
+
+                    AssignedBits::<32>::assign(
+                        &mut region,
+                        || "rol_5_b",
+                        a_5,
+                        row,
+                        Value::known(self.rol_5_b),
+                    )?;
+
+                    rol_5_b_lo.copy_advice(|| "rol_5_b_lo", &mut region, a_3, row)?;
+                    rol_5_b_hi.copy_advice(|| "rol_5_b_lo", &mut region, a_4, row)?;
 
                     Ok(())
                 }
@@ -1004,9 +1035,12 @@ mod tests {
         let b_and_c: u32 = b & c;
         let neg_b_and_d: u32 = !b & d;
         let b_or_neg_c_xor_d: u32 = (b | !c) ^ d;
+        let rol_5_b: u32 = rol(b, 5);
+        println!("{:#08x}", b);
+        println!("{:#08x}", rol_5_b);
 
         let circuit = CompressionGateTester {
-            b, c, d, xor, b_and_c, neg_b_and_d, b_or_neg_c_xor_d,
+            b, c, d, xor, b_and_c, neg_b_and_d, b_or_neg_c_xor_d, rol_5_b,
         };
 
         let prover = MockProver::run(17, &circuit, vec![]).unwrap();

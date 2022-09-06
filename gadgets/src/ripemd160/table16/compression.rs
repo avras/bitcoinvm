@@ -5,12 +5,14 @@ use super::{
 };
 use super::util::{i2lebsp, lebs2ip};
 use super::gates::Gate;
+use halo2::halo2curves::FieldExt;
+use halo2::plonk::{Expression, Constraints};
 use halo2::{
     circuit::{Layouter, Value},
     plonk::{Advice, Column, ConstraintSystem, Error, Selector},
     poly::Rotation,
 };
-use halo2::halo2curves::pasta::pallas;
+use halo2::halo2curves::pasta::{pallas, Fp};
 use std::convert::TryInto;
 use std::ops::Range;
 
@@ -68,6 +70,7 @@ pub(super) struct CompressionConfig {
     s_ch: Selector,
     s_ch_neg: Selector,
     s_or_not_xor: Selector,
+    s_rotate_left: [Selector; 11] // Rotate left with shifts from 5 to 15 (inclusive)
 }
 
 impl Table16Assignment for CompressionConfig {}
@@ -83,6 +86,19 @@ impl CompressionConfig {
         let s_ch = meta.selector();
         let s_ch_neg = meta.selector();
         let s_or_not_xor = meta.selector();
+        let s_rotate_left = [
+            meta.selector(),
+            meta.selector(),
+            meta.selector(),
+            meta.selector(),
+            meta.selector(),
+            meta.selector(),
+            meta.selector(),
+            meta.selector(),
+            meta.selector(),
+            meta.selector(),
+            meta.selector(),
+        ];
 
         // Rename these here for ease of matching the gates to the specification.
         let a_0 = lookup.tag;
@@ -232,6 +248,287 @@ impl CompressionConfig {
             )
         });
 
+        meta.create_gate("rotate_left_5", |meta| {
+            let s_rotate_left = meta.query_selector(s_rotate_left[0]);
+            let tag_b = meta.query_advice(a_0, Rotation::cur());
+            let b = meta.query_advice(a_1, Rotation::cur());
+            let c = meta.query_advice(a_1, Rotation::next());
+            let a_lo = meta.query_advice(a_3, Rotation::cur());
+            let a_hi = meta.query_advice(a_3, Rotation::next());
+            let word_lo = meta.query_advice(a_4, Rotation::cur());
+            let word_hi = meta.query_advice(a_4, Rotation::next());
+            let rol_word_lo = meta.query_advice(a_5, Rotation::cur());
+            let rol_word_hi = meta.query_advice(a_5, Rotation::next());
+            
+            CompressionGate::rotate_left_5_gate(
+                s_rotate_left,
+                a_lo,
+                a_hi,
+                b,
+                tag_b,
+                c,
+                word_lo,
+                word_hi,
+                rol_word_lo,
+                rol_word_hi,
+            )
+        });
+        
+        meta.create_gate("rotate_left_6", |meta| {
+            let s_rotate_left = meta.query_selector(s_rotate_left[1]);
+            let tag_b = meta.query_advice(a_0, Rotation::cur());
+            let b = meta.query_advice(a_1, Rotation::cur());
+            let c = meta.query_advice(a_1, Rotation::next());
+            let a_lo = meta.query_advice(a_3, Rotation::cur());
+            let a_hi = meta.query_advice(a_3, Rotation::next());
+            let word_lo = meta.query_advice(a_4, Rotation::cur());
+            let word_hi = meta.query_advice(a_4, Rotation::next());
+            let rol_word_lo = meta.query_advice(a_5, Rotation::cur());
+            let rol_word_hi = meta.query_advice(a_5, Rotation::next());
+            
+            CompressionGate::rotate_left_6_gate(
+                s_rotate_left,
+                a_lo,
+                a_hi,
+                b,
+                tag_b,
+                c,
+                word_lo,
+                word_hi,
+                rol_word_lo,
+                rol_word_hi,
+            )
+        });
+        
+        meta.create_gate("rotate_left_7", |meta| {
+            let s_rotate_left = meta.query_selector(s_rotate_left[2]);
+            let tag_b = meta.query_advice(a_0, Rotation::cur());
+            let b = meta.query_advice(a_1, Rotation::cur());
+            let c = meta.query_advice(a_1, Rotation::next());
+            let a_lo = meta.query_advice(a_3, Rotation::cur());
+            let a_hi = meta.query_advice(a_3, Rotation::next());
+            let word_lo = meta.query_advice(a_4, Rotation::cur());
+            let word_hi = meta.query_advice(a_4, Rotation::next());
+            let rol_word_lo = meta.query_advice(a_5, Rotation::cur());
+            let rol_word_hi = meta.query_advice(a_5, Rotation::next());
+            
+            CompressionGate::rotate_left_7_gate(
+                s_rotate_left,
+                a_lo,
+                a_hi,
+                b,
+                tag_b,
+                c,
+                word_lo,
+                word_hi,
+                rol_word_lo,
+                rol_word_hi,
+            )
+        });
+        
+        meta.create_gate("rotate_left_8", |meta| {
+            let s_rotate_left = meta.query_selector(s_rotate_left[3]);
+            let tag_b = meta.query_advice(a_0, Rotation::cur());
+            let b = meta.query_advice(a_1, Rotation::cur());
+            let c = meta.query_advice(a_1, Rotation::next());
+            let a_lo = meta.query_advice(a_3, Rotation::cur());
+            let a_hi = meta.query_advice(a_3, Rotation::next());
+            let word_lo = meta.query_advice(a_4, Rotation::cur());
+            let word_hi = meta.query_advice(a_4, Rotation::next());
+            let rol_word_lo = meta.query_advice(a_5, Rotation::cur());
+            let rol_word_hi = meta.query_advice(a_5, Rotation::next());
+            
+            CompressionGate::rotate_left_8_gate(
+                s_rotate_left,
+                a_lo,
+                a_hi,
+                b,
+                tag_b,
+                c,
+                word_lo,
+                word_hi,
+                rol_word_lo,
+                rol_word_hi,
+            )
+        });
+        
+        meta.create_gate("s_rotate_left_9", |meta| {
+            let s_rotate_left = meta.query_selector(s_rotate_left[4]);
+            let tag_a = meta.query_advice(a_0, Rotation::cur());
+            let a = meta.query_advice(a_1, Rotation::cur());
+            let c = meta.query_advice(a_1, Rotation::next());
+            let b_lo = meta.query_advice(a_3, Rotation::cur());
+            let b_hi = meta.query_advice(a_3, Rotation::next());
+            let word_lo = meta.query_advice(a_4, Rotation::cur());
+            let word_hi = meta.query_advice(a_4, Rotation::next());
+            let rol_word_lo = meta.query_advice(a_5, Rotation::cur());
+            let rol_word_hi = meta.query_advice(a_5, Rotation::next());
+            
+            CompressionGate::rotate_left_9_gate(
+                s_rotate_left,
+                a,
+                tag_a,
+                b_lo,
+                b_hi,
+                c,
+                word_lo,
+                word_hi,
+                rol_word_lo,
+                rol_word_hi,
+            )
+        });
+
+        meta.create_gate("s_rotate_left_10", |meta| {
+            let s_rotate_left = meta.query_selector(s_rotate_left[5]);
+            let tag_a = meta.query_advice(a_0, Rotation::cur());
+            let a = meta.query_advice(a_1, Rotation::cur());
+            let c = meta.query_advice(a_1, Rotation::next());
+            let b_lo = meta.query_advice(a_3, Rotation::cur());
+            let b_hi = meta.query_advice(a_3, Rotation::next());
+            let word_lo = meta.query_advice(a_4, Rotation::cur());
+            let word_hi = meta.query_advice(a_4, Rotation::next());
+            let rol_word_lo = meta.query_advice(a_5, Rotation::cur());
+            let rol_word_hi = meta.query_advice(a_5, Rotation::next());
+            
+            CompressionGate::rotate_left_10_gate(
+                s_rotate_left,
+                a,
+                tag_a,
+                b_lo,
+                b_hi,
+                c,
+                word_lo,
+                word_hi,
+                rol_word_lo,
+                rol_word_hi,
+            )
+        });
+
+        meta.create_gate("s_rotate_left_11", |meta| {
+            let s_rotate_left = meta.query_selector(s_rotate_left[6]);
+            let tag_a = meta.query_advice(a_0, Rotation::cur());
+            let a = meta.query_advice(a_1, Rotation::cur());
+            let c = meta.query_advice(a_1, Rotation::next());
+            let b_lo = meta.query_advice(a_3, Rotation::cur());
+            let b_hi = meta.query_advice(a_3, Rotation::next());
+            let word_lo = meta.query_advice(a_4, Rotation::cur());
+            let word_hi = meta.query_advice(a_4, Rotation::next());
+            let rol_word_lo = meta.query_advice(a_5, Rotation::cur());
+            let rol_word_hi = meta.query_advice(a_5, Rotation::next());
+            
+            CompressionGate::rotate_left_11_gate(
+                s_rotate_left,
+                a,
+                tag_a,
+                b_lo,
+                b_hi,
+                c,
+                word_lo,
+                word_hi,
+                rol_word_lo,
+                rol_word_hi,
+            )
+        });
+
+        meta.create_gate("s_rotate_left_12", |meta| {
+            let s_rotate_left = meta.query_selector(s_rotate_left[7]);
+            let tag_a = meta.query_advice(a_0, Rotation::cur());
+            let a = meta.query_advice(a_1, Rotation::cur());
+            let c = meta.query_advice(a_1, Rotation::next());
+            let b_lo = meta.query_advice(a_3, Rotation::cur());
+            let b_hi = meta.query_advice(a_3, Rotation::next());
+            let word_lo = meta.query_advice(a_4, Rotation::cur());
+            let word_hi = meta.query_advice(a_4, Rotation::next());
+            let rol_word_lo = meta.query_advice(a_5, Rotation::cur());
+            let rol_word_hi = meta.query_advice(a_5, Rotation::next());
+            
+            CompressionGate::rotate_left_12_gate(
+                s_rotate_left,
+                a,
+                tag_a,
+                b_lo,
+                b_hi,
+                c,
+                word_lo,
+                word_hi,
+                rol_word_lo,
+                rol_word_hi,
+            )
+        });
+
+        meta.create_gate("s_rotate_left_13", |meta| {
+            let s_rotate_left = meta.query_selector(s_rotate_left[8]);
+            let tag_a = meta.query_advice(a_0, Rotation::cur());
+            let a = meta.query_advice(a_1, Rotation::cur());
+            let c = meta.query_advice(a_1, Rotation::next());
+            let b = meta.query_advice(a_3, Rotation::cur());
+            let word_lo = meta.query_advice(a_4, Rotation::cur());
+            let word_hi = meta.query_advice(a_4, Rotation::next());
+            let rol_word_lo = meta.query_advice(a_5, Rotation::cur());
+            let rol_word_hi = meta.query_advice(a_5, Rotation::next());
+            
+            CompressionGate::rotate_left_13_gate(
+                s_rotate_left,
+                a,
+                tag_a,
+                b,
+                c,
+                word_lo,
+                word_hi,
+                rol_word_lo,
+                rol_word_hi,
+            )
+        });
+
+        meta.create_gate("s_rotate_left_14", |meta| {
+            let s_rotate_left = meta.query_selector(s_rotate_left[9]);
+            let tag_a = meta.query_advice(a_0, Rotation::cur());
+            let a = meta.query_advice(a_1, Rotation::cur());
+            let c = meta.query_advice(a_1, Rotation::next());
+            let b = meta.query_advice(a_3, Rotation::cur());
+            let word_lo = meta.query_advice(a_4, Rotation::cur());
+            let word_hi = meta.query_advice(a_4, Rotation::next());
+            let rol_word_lo = meta.query_advice(a_5, Rotation::cur());
+            let rol_word_hi = meta.query_advice(a_5, Rotation::next());
+            
+            CompressionGate::rotate_left_14_gate(
+                s_rotate_left,
+                a,
+                tag_a,
+                b,
+                c,
+                word_lo,
+                word_hi,
+                rol_word_lo,
+                rol_word_hi,
+            )
+        });
+
+        meta.create_gate("s_rotate_left_15", |meta| {
+            let s_rotate_left = meta.query_selector(s_rotate_left[10]);
+            let tag_a = meta.query_advice(a_0, Rotation::cur());
+            let a = meta.query_advice(a_1, Rotation::cur());
+            let c = meta.query_advice(a_1, Rotation::next());
+            let b = meta.query_advice(a_3, Rotation::cur());
+            let word_lo = meta.query_advice(a_4, Rotation::cur());
+            let word_hi = meta.query_advice(a_4, Rotation::next());
+            let rol_word_lo = meta.query_advice(a_5, Rotation::cur());
+            let rol_word_hi = meta.query_advice(a_5, Rotation::next());
+            
+            CompressionGate::rotate_left_15_gate(
+                s_rotate_left,
+                a,
+                tag_a,
+                b,
+                c,
+                word_lo,
+                word_hi,
+                rol_word_lo,
+                rol_word_hi,
+            )
+        });
+
+
         CompressionConfig {
             lookup,
             advice,
@@ -239,7 +536,8 @@ impl CompressionConfig {
             s_f1,
             s_ch,
             s_ch_neg,
-            s_or_not_xor
+            s_or_not_xor,
+            s_rotate_left,
         }
     }
     

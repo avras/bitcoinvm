@@ -400,6 +400,36 @@ impl CompressionConfig {
 
             AssignedBits::<2>::assign_bits(region, || "a_lo(2)", a_3, row, a_lo)?;
             AssignedBits::<3>::assign_bits(region, || "a_hi(3)", a_3, row + 1, a_hi)?;
+        }
+        else if shift == 6 {
+            let b: Value<[bool; 10]> = word_hi.map(|q| q[..10].try_into().unwrap());
+            let b: Value<[bool; 16]> = b.map(|x| lebs2ip::<10>(&x)).map(|y| i2lebsp::<16>(y));
+            let a_lo: Value<[bool; 3]> = word_hi.map(|q| q[10..13].try_into().unwrap());
+            let a_hi: Value<[bool; 3]> = word_hi.map(|q| q[13..].try_into().unwrap());
+            self.assign_spread_word(region, &self.lookup, row, b, c)?;
+
+            AssignedBits::<3>::assign_bits(region, || "a_lo(3)", a_3, row, a_lo)?;
+            AssignedBits::<3>::assign_bits(region, || "a_hi(3)", a_3, row + 1, a_hi)?;
+        }
+        else if shift == 7 {
+            let b: Value<[bool; 9]> = word_hi.map(|q| q[..9].try_into().unwrap());
+            let b: Value<[bool; 16]> = b.map(|x| lebs2ip::<9>(&x)).map(|y| i2lebsp::<16>(y));
+            let a_lo: Value<[bool; 3]> = word_hi.map(|q| q[9..12].try_into().unwrap());
+            let a_hi: Value<[bool; 4]> = word_hi.map(|q| q[12..].try_into().unwrap());
+            self.assign_spread_word(region, &self.lookup, row, b, c)?;
+
+            AssignedBits::<3>::assign_bits(region, || "a_lo(3)", a_3, row, a_lo)?;
+            AssignedBits::<4>::assign_bits(region, || "a_hi(4)", a_3, row + 1, a_hi)?;
+        }
+        else if shift == 8 {
+            let b: Value<[bool; 8]> = word_hi.map(|q| q[..8].try_into().unwrap());
+            let b: Value<[bool; 16]> = b.map(|x| lebs2ip::<8>(&x)).map(|y| i2lebsp::<16>(y));
+            let a_lo: Value<[bool; 4]> = word_hi.map(|q| q[8..12].try_into().unwrap());
+            let a_hi: Value<[bool; 4]> = word_hi.map(|q| q[12..].try_into().unwrap());
+            self.assign_spread_word(region, &self.lookup, row, b, c)?;
+
+            AssignedBits::<4>::assign_bits(region, || "a_lo(4)", a_3, row, a_lo)?;
+            AssignedBits::<4>::assign_bits(region, || "a_hi(4)", a_3, row + 1, a_hi)?;
         };
 
         Ok((rol_word_lo, rol_word_hi))

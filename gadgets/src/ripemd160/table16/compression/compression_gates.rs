@@ -279,17 +279,17 @@ impl<F: FieldExt> CompressionGate<F> {
         let range_check_a_lo = Gate::three_bit_range(a_lo.clone());
         let range_check_a_hi = Gate::three_bit_range(a_hi.clone());
 
-        let word_check = a_lo.clone()
-        + a_hi.clone() * F::from(1 << 3)
-        + b.clone() * F::from(1 << 6)
-        + c.clone() * F::from(1 << 16)
+        let word_check = c.clone()
+        + b.clone() * F::from(1 << 16)
+        + a_lo.clone() * F::from(1 << 26)
+        + a_hi.clone() * F::from(1 << 29)
         + word_lo * (-F::one())
         + word_hi * F::from(1 << 16) * (-F::one());
 
-        let rol_6_word_check = b
-        + c * F::from(1 << 10)
-        + a_lo * F::from(1 << 26)
-        + a_hi * F::from(1 << 29)
+        let rol_6_word_check = a_lo
+        + a_hi * F::from(1 << 3)
+        + c * F::from(1 << 6)
+        + b * F::from(1 << 22)
         + rol_6_word_lo * (-F::one())
         + rol_6_word_hi * F::from(1 << 16) * (-F::one());
 
@@ -329,17 +329,17 @@ impl<F: FieldExt> CompressionGate<F> {
         let range_check_a_lo = Gate::three_bit_range(a_lo.clone());
         let range_check_a_hi = Gate::four_bit_range(a_hi.clone());
 
-        let word_check = a_lo.clone()
-        + a_hi.clone() * F::from(1 << 3)
-        + b.clone() * F::from(1 << 7)
-        + c.clone() * F::from(1 << 16)
+        let word_check = c.clone()
+        + b.clone() * F::from(1 << 16)
+        + a_lo.clone() * F::from(1 << 25)
+        + a_hi.clone() * F::from(1 << 28)
         + word_lo * (-F::one())
         + word_hi * F::from(1 << 16) * (-F::one());
 
-        let rol_7_word_check = b
-        + c * F::from(1 << 9)
-        + a_lo * F::from(1 << 25)
-        + a_hi * F::from(1 << 28)
+        let rol_7_word_check = a_lo
+        + a_hi * F::from(1 << 3)
+        + c * F::from(1 << 7)
+        + b * F::from(1 << 23)
         + rol_7_word_lo * (-F::one())
         + rol_7_word_hi * F::from(1 << 16) * (-F::one());
 
@@ -379,17 +379,17 @@ impl<F: FieldExt> CompressionGate<F> {
         let range_check_a_lo = Gate::four_bit_range(a_lo.clone());
         let range_check_a_hi = Gate::four_bit_range(a_hi.clone());
 
-        let word_check = a_lo.clone()
-        + a_hi.clone() * F::from(1 << 4)
-        + b.clone() * F::from(1 << 8)
-        + c.clone() * F::from(1 << 16)
+        let word_check = c.clone()
+        + b.clone() * F::from(1 << 16)
+        + a_lo.clone() * F::from(1 << 24)
+        + a_hi.clone() * F::from(1 << 28)
         + word_lo * (-F::one())
         + word_hi * F::from(1 << 16) * (-F::one());
 
-        let rol_8_word_check = b
+        let rol_8_word_check = a_lo
+        + a_hi * F::from(1 << 4)
         + c * F::from(1 << 8)
-        + a_lo * F::from(1 << 24)
-        + a_hi * F::from(1 << 28)
+        + b * F::from(1 << 24)
         + rol_8_word_lo * (-F::one())
         + rol_8_word_hi * F::from(1 << 16) * (-F::one());
 
@@ -768,6 +768,9 @@ mod tests {
         pub neg_b_and_d: u32,
         pub b_or_neg_c_xor_d: u32,
         pub rol_5_b: u32,
+        pub rol_6_b: u32,
+        pub rol_7_b: u32,
+        pub rol_8_b: u32,
     }
 
     impl Circuit<Fp> for CompressionGateTester {
@@ -784,6 +787,9 @@ mod tests {
                 neg_b_and_d: 0,
                 b_or_neg_c_xor_d: 0,
                 rol_5_b: 0,
+                rol_6_b: 0,
+                rol_7_b: 0,
+                rol_8_b: 0,
             }
         }
 
@@ -878,7 +884,7 @@ mod tests {
                     )?;
                     row += 2;
 
-                    let spread_halves_b = (spread_b_var_lo.spread, spread_b_var_hi.spread);
+                    let spread_halves_b = (spread_b_var_lo.clone().spread, spread_b_var_hi.clone().spread);
                     let spread_halves_c = (spread_c_var_lo.spread, spread_c_var_hi.spread);
                     let spread_halves_d = (spread_d_var_lo.spread, spread_d_var_hi.spread);
 
@@ -994,7 +1000,7 @@ mod tests {
                     // row = 32
                     // Testing rotate_left_5 gate
                     let b_round_word_dense =
-                        RoundWordDense(spread_b_var_lo.dense, spread_b_var_hi.dense);
+                        RoundWordDense(spread_b_var_lo.clone().dense, spread_b_var_hi.clone().dense);
                     let (rol_5_b_lo, rol_5_b_hi) =
                     config.compression.assign_rotate_left(
                         &mut region,
@@ -1017,7 +1023,90 @@ mod tests {
 
                     rol_5_b_lo.copy_advice(|| "rol_5_b_lo", &mut region, a_3, row)?;
                     rol_5_b_hi.copy_advice(|| "rol_5_b_lo", &mut region, a_4, row)?;
+                    row += 1;
 
+                    // row = 35
+                    // Testing rotate_left_6 gate
+                    let b_round_word_dense =
+                        RoundWordDense(spread_b_var_lo.clone().dense, spread_b_var_hi.clone().dense);
+                    let (rol_6_b_lo, rol_6_b_hi) =
+                    config.compression.assign_rotate_left(
+                        &mut region,
+                        row,
+                        b_round_word_dense,
+                        6
+                    )?;
+                    row += 2; // rotate_left_6 requires two rows
+
+                    // row = 37
+                    config.compression.s_decompose_0.enable(&mut region, row)?;
+
+                    AssignedBits::<32>::assign(
+                        &mut region,
+                        || "rol_6_b",
+                        a_5,
+                        row,
+                        Value::known(self.rol_6_b),
+                    )?;
+
+                    rol_6_b_lo.copy_advice(|| "rol_6_b_lo", &mut region, a_3, row)?;
+                    rol_6_b_hi.copy_advice(|| "rol_6_b_lo", &mut region, a_4, row)?;
+                    row += 1;
+
+                    // row = 38
+                    // Testing rotate_left_7 gate
+                    let b_round_word_dense =
+                        RoundWordDense(spread_b_var_lo.clone().dense, spread_b_var_hi.clone().dense);
+                    let (rol_7_b_lo, rol_7_b_hi) =
+                    config.compression.assign_rotate_left(
+                        &mut region,
+                        row,
+                        b_round_word_dense,
+                        7
+                    )?;
+                    row += 2; // rotate_left_7 requires two rows
+
+                    // row = 40
+                    config.compression.s_decompose_0.enable(&mut region, row)?;
+
+                    AssignedBits::<32>::assign(
+                        &mut region,
+                        || "rol_7_b",
+                        a_5,
+                        row,
+                        Value::known(self.rol_7_b),
+                    )?;
+
+                    rol_7_b_lo.copy_advice(|| "rol_7_b_lo", &mut region, a_3, row)?;
+                    rol_7_b_hi.copy_advice(|| "rol_7_b_lo", &mut region, a_4, row)?;
+                    row += 1;
+
+                    // row = 39
+                    // Testing rotate_left_8 gate
+                    let b_round_word_dense =
+                        RoundWordDense(spread_b_var_lo.clone().dense, spread_b_var_hi.clone().dense);
+                    let (rol_8_b_lo, rol_8_b_hi) =
+                    config.compression.assign_rotate_left(
+                        &mut region,
+                        row,
+                        b_round_word_dense,
+                        8
+                    )?;
+                    row += 2; // rotate_left_8 requires two rows
+
+                    // row = 41
+                    config.compression.s_decompose_0.enable(&mut region, row)?;
+
+                    AssignedBits::<32>::assign(
+                        &mut region,
+                        || "rol_8_b",
+                        a_5,
+                        row,
+                        Value::known(self.rol_8_b),
+                    )?;
+
+                    rol_8_b_lo.copy_advice(|| "rol_8_b_lo", &mut region, a_3, row)?;
+                    rol_8_b_hi.copy_advice(|| "rol_8_b_lo", &mut region, a_4, row)?;
                     Ok(())
                 }
             )?;
@@ -1036,9 +1125,22 @@ mod tests {
         let neg_b_and_d: u32 = !b & d;
         let b_or_neg_c_xor_d: u32 = (b | !c) ^ d;
         let rol_5_b: u32 = rol(b, 5);
+        let rol_6_b: u32 = rol(b, 6);
+        let rol_7_b: u32 = rol(b, 7);
+        let rol_8_b: u32 = rol(b, 8);
 
         let circuit = CompressionGateTester {
-            b, c, d, xor, b_and_c, neg_b_and_d, b_or_neg_c_xor_d, rol_5_b,
+            b,
+            c,
+            d,
+            xor,
+            b_and_c,
+            neg_b_and_d,
+            b_or_neg_c_xor_d,
+            rol_5_b,
+            rol_6_b,
+            rol_7_b,
+            rol_8_b,
         };
 
         let prover = MockProver::run(17, &circuit, vec![]).unwrap();

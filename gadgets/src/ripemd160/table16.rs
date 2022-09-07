@@ -207,9 +207,9 @@ pub const NUM_ADVICE_COLS: usize = 3;
 
 /// Common assignment patterns used by Table16 regions.
 trait Table16Assignment {
-    fn assign_word_and_halves(
+    fn assign_word_and_halves<A, AR>(
         &self,
-        annotation: String,
+        annotation: A,
         region: &mut Region<'_, pallas::Base>,
         lookup: &SpreadInputs,
         a_3: Column<Advice>,
@@ -217,7 +217,11 @@ trait Table16Assignment {
         a_5: Column<Advice>,
         word: Value<u32>,
         row: usize,
-    ) -> Result<(AssignedBits<32>, (SpreadVar<16, 32>, SpreadVar<16,32>)), Error> {
+    ) -> Result<(AssignedBits<32>, (SpreadVar<16, 32>, SpreadVar<16,32>)), Error> 
+    where
+        A: Fn() -> AR,
+        AR: Into<String>,
+    {
 
         let w_lo_val = word.map(|word| word as u16);
         let w_lo_bvec: Value<[bool; 16]> = w_lo_val.map(|x| i2lebsp(x.into()));

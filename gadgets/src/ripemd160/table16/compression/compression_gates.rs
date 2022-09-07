@@ -936,7 +936,7 @@ mod tests {
 
                     let (_, (spread_b_var_lo, spread_b_var_hi)) =
                     config.compression.assign_word_and_halves(
-                         "b".to_string(),
+                         || "b",
                          &mut region,
                          &config.lookup.input,
                          a_3,
@@ -950,7 +950,7 @@ mod tests {
                     // row = 2
                     let (_, (spread_c_var_lo, spread_c_var_hi)) =
                     config.compression.assign_word_and_halves(
-                         "c".to_string(),
+                         || "c",
                          &mut region,
                          &config.lookup.input,
                          a_3,
@@ -964,7 +964,7 @@ mod tests {
                     // row = 4
                     let (_, (spread_d_var_lo, spread_d_var_hi)) =
                     config.compression.assign_word_and_halves(
-                         "d".to_string(),
+                         || "d",
                          &mut region,
                          &config.lookup.input,
                          a_3,

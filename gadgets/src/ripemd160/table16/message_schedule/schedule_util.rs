@@ -40,7 +40,7 @@ impl MessageScheduleConfig {
 
         let (word, (spread_var_lo, spread_var_hi)) =
         self.assign_word_and_halves(
-            format!("X_{}", row),
+            || format!("X_{}", row),
             region,
             &self.lookup,
             a_3,

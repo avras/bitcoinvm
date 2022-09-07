@@ -72,6 +72,7 @@ pub(super) struct CompressionConfig {
     s_or_not_xor: Selector,
     s_rotate_left: [Selector; 11], // Rotate left with shifts from 5 to 15 (inclusive)
     s_sum_afxk: Selector,
+    s_sum_re: Selector,
 }
 
 impl Table16Assignment for CompressionConfig {}
@@ -101,6 +102,7 @@ impl CompressionConfig {
             meta.selector(),
         ];
         let s_sum_afxk = meta.selector();
+        let s_sum_re = meta.selector();
 
         // Rename these here for ease of matching the gates to the specification.
         let a_0 = lookup.tag;
@@ -561,6 +563,28 @@ impl CompressionConfig {
             )
         });
 
+        meta.create_gate("s_sum_re", |meta| {
+            let s_sum_re = meta.query_selector(s_sum_re);
+            let sum_lo = meta.query_advice(a_1, Rotation::cur());
+            let sum_hi = meta.query_advice(a_1, Rotation::next());
+            let rol_lo = meta.query_advice(a_3, Rotation::cur());
+            let rol_hi = meta.query_advice(a_3, Rotation::next());
+            let e_lo = meta.query_advice(a_4, Rotation::cur());
+            let e_hi = meta.query_advice(a_4, Rotation::next());
+            let carry = meta.query_advice(a_5, Rotation::cur());
+            
+            CompressionGate::sum_re_gate(
+                s_sum_re,
+                sum_lo,
+                sum_hi,
+                carry,
+                rol_lo,
+                rol_hi,
+                e_lo,
+                e_hi,
+            )
+        });
+
 
         CompressionConfig {
             lookup,
@@ -572,6 +596,7 @@ impl CompressionConfig {
             s_or_not_xor,
             s_rotate_left,
             s_sum_afxk,
+            s_sum_re,
         }
     }
     

@@ -504,7 +504,7 @@ impl CompressionConfig {
     //        |     | sum_hi | spread_sum_hi | a_hi | f_hi | x_hi  | 
     //        |     |        |               | k_lo | k_hi | carry |
     //
-    pub(super) fn assign_sum1(
+    pub(super) fn assign_sum_afxk(
         &self,
         region: &mut Region<'_, pallas::Base>,
         row: usize,
@@ -548,9 +548,54 @@ impl CompressionConfig {
         ]);
 
         region.assign_advice(
-            || "sum1_carry",
+            || "sum_afxk_carry",
             a_5,
             row + 2,
+            || carry.map(|value| pallas::Base::from(value as u64)),
+        )?;
+
+        let sum: Value<[bool; 32]> = sum.map(|w| i2lebsp(w.into()));
+        let sum_lo: Value<[bool; 16]> = sum.map(|w| w[..16].try_into().unwrap());
+        let sum_hi: Value<[bool; 16]> = sum.map(|w| w[16..].try_into().unwrap());
+
+        let (dense, _spread) = self.assign_spread_word(region, &self.lookup, row, sum_lo, sum_hi)?;
+
+        Ok(dense.into())
+    }
+
+    // s_sum1 | a_0 |   a_1  |       a_2     | a_3    | a_4  | a_5   |
+    //   1    |     | sum_lo | spread_sum_lo | rol_lo | e_lo | carry | 
+    //        |     | sum_hi | spread_sum_hi | rol_hi | e_hi |       |
+    //
+    pub(super) fn assign_sum_re(
+        &self,
+        region: &mut Region<'_, pallas::Base>,
+        row: usize,
+        rol: RoundWordDense,
+        e: RoundWordDense,
+    ) -> Result<RoundWordDense, Error> {
+        let a_3 = self.advice[0];
+        let a_4 = self.advice[1];
+        let a_5 = self.advice[2];
+
+
+        // Assign and copy a_lo, a_hi
+        rol.0.copy_advice(|| "rol_lo", region, a_3, row)?;
+        rol.1.copy_advice(|| "rol_hi", region, a_3, row + 1)?;
+        
+        // Assign and copy f_lo, f_hi
+        e.0.copy_advice(|| "e_lo", region, a_4, row)?;
+        e.1.copy_advice(|| "e_hi", region, a_4, row + 1)?;
+
+        let (sum, carry) = sum_with_carry(vec![
+            (rol.0.value_u16(), rol.1.value_u16()),
+            (e.0.value_u16(), e.1.value_u16()),
+        ]);
+
+        region.assign_advice(
+            || "sum_re_carry",
+            a_5,
+            row,
             || carry.map(|value| pallas::Base::from(value as u64)),
         )?;
 

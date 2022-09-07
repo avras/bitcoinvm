@@ -430,6 +430,46 @@ impl CompressionConfig {
 
             AssignedBits::<4>::assign_bits(region, || "a_lo(4)", a_3, row, a_lo)?;
             AssignedBits::<4>::assign_bits(region, || "a_hi(4)", a_3, row + 1, a_hi)?;
+        }
+        else if shift == 9 {
+            let a: Value<[bool; 9]> = word_hi.map(|q| q[7..].try_into().unwrap());
+            let a: Value<[bool; 16]> = a.map(|x| lebs2ip::<9>(&x)).map(|y| i2lebsp::<16>(y));
+            let b_lo: Value<[bool; 3]> = word_hi.map(|q| q[0..3].try_into().unwrap());
+            let b_hi: Value<[bool; 4]> = word_hi.map(|q| q[3..7].try_into().unwrap());
+            self.assign_spread_word(region, &self.lookup, row, a, c)?;
+
+            AssignedBits::<3>::assign_bits(region, || "b_lo(3)", a_3, row, b_lo)?;
+            AssignedBits::<4>::assign_bits(region, || "b_hi(4)", a_3, row + 1, b_hi)?;
+        }
+        else if shift == 10 {
+            let a: Value<[bool; 10]> = word_hi.map(|q| q[6..].try_into().unwrap());
+            let a: Value<[bool; 16]> = a.map(|x| lebs2ip::<10>(&x)).map(|y| i2lebsp::<16>(y));
+            let b_lo: Value<[bool; 3]> = word_hi.map(|q| q[0..3].try_into().unwrap());
+            let b_hi: Value<[bool; 3]> = word_hi.map(|q| q[3..6].try_into().unwrap());
+            self.assign_spread_word(region, &self.lookup, row, a, c)?;
+
+            AssignedBits::<3>::assign_bits(region, || "b_lo(3)", a_3, row, b_lo)?;
+            AssignedBits::<3>::assign_bits(region, || "b_hi(3)", a_3, row + 1, b_hi)?;
+        }
+        else if shift == 11 {
+            let a: Value<[bool; 11]> = word_hi.map(|q| q[5..].try_into().unwrap());
+            let a: Value<[bool; 16]> = a.map(|x| lebs2ip::<11>(&x)).map(|y| i2lebsp::<16>(y));
+            let b_lo: Value<[bool; 2]> = word_hi.map(|q| q[0..2].try_into().unwrap());
+            let b_hi: Value<[bool; 3]> = word_hi.map(|q| q[2..5].try_into().unwrap());
+            self.assign_spread_word(region, &self.lookup, row, a, c)?;
+
+            AssignedBits::<2>::assign_bits(region, || "b_lo(2)", a_3, row, b_lo)?;
+            AssignedBits::<3>::assign_bits(region, || "b_hi(3)", a_3, row + 1, b_hi)?;
+        }
+        else if shift == 12 {
+            let a: Value<[bool; 12]> = word_hi.map(|q| q[4..].try_into().unwrap());
+            let a: Value<[bool; 16]> = a.map(|x| lebs2ip::<12>(&x)).map(|y| i2lebsp::<16>(y));
+            let b_lo: Value<[bool; 2]> = word_hi.map(|q| q[0..2].try_into().unwrap());
+            let b_hi: Value<[bool; 2]> = word_hi.map(|q| q[2..4].try_into().unwrap());
+            self.assign_spread_word(region, &self.lookup, row, a, c)?;
+
+            AssignedBits::<2>::assign_bits(region, || "b_lo(2)", a_3, row, b_lo)?;
+            AssignedBits::<2>::assign_bits(region, || "b_hi(2)", a_3, row + 1, b_hi)?;
         };
 
         Ok((rol_word_lo, rol_word_hi))

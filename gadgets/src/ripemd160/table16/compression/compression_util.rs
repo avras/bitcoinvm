@@ -1,7 +1,7 @@
 use crate::ripemd160::ref_impl::helper_functions::rol;
 use crate::ripemd160::table16::AssignedBits;
 use crate::ripemd160::table16::spread_table::{SpreadInputs, SpreadVar, SpreadWord};
-use crate::ripemd160::table16::util::{i2lebsp, even_bits, odd_bits, lebs2ip, negate_spread};
+use crate::ripemd160::table16::util::{i2lebsp, even_bits, odd_bits, lebs2ip, negate_spread, sum_with_carry};
 
 use super::{CompressionConfig, RoundWordSpread, RoundWordDense};
 
@@ -497,6 +497,70 @@ impl CompressionConfig {
         };
 
         Ok((rol_word_lo, rol_word_hi))
+    }
+
+    // s_sum1 | a_0 |   a_1  |       a_2     | a_3  | a_4  | a_5   |
+    //   1    |     | sum_lo | spread_sum_lo | a_lo | f_lo | x_lo  | 
+    //        |     | sum_hi | spread_sum_hi | a_hi | f_hi | x_hi  | 
+    //        |     |        |               | k_lo | k_hi | carry |
+    //
+    pub(super) fn assign_sum1(
+        &self,
+        region: &mut Region<'_, pallas::Base>,
+        row: usize,
+        a: RoundWordDense,
+        f: RoundWordDense,
+        x: RoundWordDense,
+        k: u32,
+    ) -> Result<RoundWordDense, Error> {
+        let a_3 = self.advice[0];
+        let a_4 = self.advice[1];
+        let a_5 = self.advice[2];
+
+
+        // Assign and copy a_lo, a_hi
+        a.0.copy_advice(|| "a_lo", region, a_3, row)?;
+        a.1.copy_advice(|| "a_hi", region, a_3, row + 1)?;
+        
+        // Assign and copy f_lo, f_hi
+        f.0.copy_advice(|| "f_lo", region, a_4, row)?;
+        f.1.copy_advice(|| "f_hi", region, a_4, row + 1)?;
+
+        // Assign and copy x_lo, x_hi
+        x.0.copy_advice(|| "x_lo", region, a_5, row)?;
+        x.1.copy_advice(|| "x_hi", region, a_5, row + 1)?;
+        
+        // Assign k
+        let k: [bool; 32] = i2lebsp(k.into());
+        let k_lo: [bool; 16] = k[..16].try_into().unwrap();
+        let k_hi: [bool; 16] = k[16..].try_into().unwrap();
+        AssignedBits::<16>::assign_bits(region, || "k_lo", a_3, row + 2, Value::known(k_lo))?;
+        AssignedBits::<16>::assign_bits(region, || "k_hi", a_4, row + 2, Value::known(k_hi))?;
+        
+        let (sum, carry) = sum_with_carry(vec![
+            (a.0.value_u16(), a.1.value_u16()),
+            (f.0.value_u16(), f.1.value_u16()),
+            (x.0.value_u16(), x.1.value_u16()),
+            (
+                Value::known(lebs2ip(&k_lo) as u16),
+                Value::known(lebs2ip(&k_hi) as u16),
+            ),
+        ]);
+
+        region.assign_advice(
+            || "sum1_carry",
+            a_5,
+            row + 2,
+            || carry.map(|value| pallas::Base::from(value as u64)),
+        )?;
+
+        let sum: Value<[bool; 32]> = sum.map(|w| i2lebsp(w.into()));
+        let sum_lo: Value<[bool; 16]> = sum.map(|w| w[..16].try_into().unwrap());
+        let sum_hi: Value<[bool; 16]> = sum.map(|w| w[16..].try_into().unwrap());
+
+        let (dense, _spread) = self.assign_spread_word(region, &self.lookup, row, sum_lo, sum_hi)?;
+
+        Ok(dense.into())
     }
 
     //          | a_0 |   a_1    |       a_2       |

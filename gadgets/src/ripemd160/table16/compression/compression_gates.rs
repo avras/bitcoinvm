@@ -738,6 +738,43 @@ impl<F: FieldExt> CompressionGate<F> {
                 .chain(Some(("rol_15_word_check", rol_15_word_check)))
         )
     }
+
+    // Gate for  A + f(j, B, C, D) + X[r[j]] + K[j]  where r is the rotate amount array
+    #[allow(clippy::too_many_arguments)]
+    pub fn sum_afxk_gate(
+        s_sum_afxk: Expression<F>,
+        sum_lo: Expression<F>,
+        sum_hi: Expression<F>,
+        carry: Expression<F>,
+        a_lo: Expression<F>,
+        a_hi: Expression<F>,
+        f_lo: Expression<F>,
+        f_hi: Expression<F>,
+        x_lo: Expression<F>,
+        x_hi: Expression<F>,
+        k_lo: Expression<F>,
+        k_hi: Expression<F>,
+    ) -> Constraints<
+        F,
+        (&'static str, Expression<F>),
+        impl Iterator<Item = (&'static str, Expression<F>)>,
+    > {
+        let range_check_carry = Gate::range_check(carry.clone(), 0, 2);
+
+        let lo = a_lo + f_lo + x_lo + k_lo;
+        let hi = a_hi + f_hi + x_hi + k_hi;
+        let sum = lo + hi * F::from(1 << 16);
+        let mod_sum = sum_lo + sum_hi * F::from(1 << 16);
+
+        let sum_check = sum - (carry * F::from(1 << 32)) - mod_sum;
+
+        Constraints::with_selector(
+            s_sum_afxk,
+            std::iter::empty()
+                .chain(Some(("range_check_carry", range_check_carry)))
+                .chain(Some(("sum1", sum_check)))
+        )
+    }
 }
 
 #[cfg(test)]
@@ -763,6 +800,7 @@ mod tests {
         pub b: u32,
         pub c: u32,
         pub d: u32,
+        pub k: u32,
         pub xor: u32,
         pub b_and_c: u32,
         pub neg_b_and_d: u32,
@@ -778,6 +816,7 @@ mod tests {
         pub rol_13_b: u32,
         pub rol_14_b: u32,
         pub rol_15_b: u32,
+        pub sum_bcdk: u32,
     }
 
     impl Circuit<Fp> for CompressionGateTester {
@@ -789,6 +828,7 @@ mod tests {
                 b: 0,
                 c: 0,
                 d: 0,
+                k: 0,
                 xor: 0,
                 b_and_c: 0,
                 neg_b_and_d: 0,
@@ -804,6 +844,7 @@ mod tests {
                 rol_13_b: 0,
                 rol_14_b: 0,
                 rol_15_b: 0,
+                sum_bcdk: 0,
             }
         }
 
@@ -899,8 +940,8 @@ mod tests {
                     row += 2;
 
                     let spread_halves_b = (spread_b_var_lo.clone().spread, spread_b_var_hi.clone().spread);
-                    let spread_halves_c = (spread_c_var_lo.spread, spread_c_var_hi.spread);
-                    let spread_halves_d = (spread_d_var_lo.spread, spread_d_var_hi.spread);
+                    let spread_halves_c = (spread_c_var_lo.clone().spread, spread_c_var_hi.clone().spread);
+                    let spread_halves_d = (spread_d_var_lo.clone().spread, spread_d_var_hi.clone().spread);
 
                     // row = 6
                     // Testing f1_gate
@@ -1036,7 +1077,7 @@ mod tests {
                     )?;
 
                     rol_5_b_lo.copy_advice(|| "rol_5_b_lo", &mut region, a_3, row)?;
-                    rol_5_b_hi.copy_advice(|| "rol_5_b_lo", &mut region, a_4, row)?;
+                    rol_5_b_hi.copy_advice(|| "rol_5_b_hi", &mut region, a_4, row)?;
                     row += 1;
 
                     // row = 35
@@ -1064,7 +1105,7 @@ mod tests {
                     )?;
 
                     rol_6_b_lo.copy_advice(|| "rol_6_b_lo", &mut region, a_3, row)?;
-                    rol_6_b_hi.copy_advice(|| "rol_6_b_lo", &mut region, a_4, row)?;
+                    rol_6_b_hi.copy_advice(|| "rol_6_b_hi", &mut region, a_4, row)?;
                     row += 1;
 
                     // row = 38
@@ -1092,7 +1133,7 @@ mod tests {
                     )?;
 
                     rol_7_b_lo.copy_advice(|| "rol_7_b_lo", &mut region, a_3, row)?;
-                    rol_7_b_hi.copy_advice(|| "rol_7_b_lo", &mut region, a_4, row)?;
+                    rol_7_b_hi.copy_advice(|| "rol_7_b_hi", &mut region, a_4, row)?;
                     row += 1;
 
                     // row = 39
@@ -1120,7 +1161,7 @@ mod tests {
                     )?;
 
                     rol_8_b_lo.copy_advice(|| "rol_8_b_lo", &mut region, a_3, row)?;
-                    rol_8_b_hi.copy_advice(|| "rol_8_b_lo", &mut region, a_4, row)?;
+                    rol_8_b_hi.copy_advice(|| "rol_8_b_hi", &mut region, a_4, row)?;
                     row += 1;
 
                     // row = 42
@@ -1148,7 +1189,7 @@ mod tests {
                     )?;
 
                     rol_9_b_lo.copy_advice(|| "rol_9_b_lo", &mut region, a_3, row)?;
-                    rol_9_b_hi.copy_advice(|| "rol_9_b_lo", &mut region, a_4, row)?;
+                    rol_9_b_hi.copy_advice(|| "rol_9_b_hi", &mut region, a_4, row)?;
                     row += 1;
 
                     // row = 45
@@ -1176,7 +1217,7 @@ mod tests {
                     )?;
 
                     rol_10_b_lo.copy_advice(|| "rol_10_b_lo", &mut region, a_3, row)?;
-                    rol_10_b_hi.copy_advice(|| "rol_10_b_lo", &mut region, a_4, row)?;
+                    rol_10_b_hi.copy_advice(|| "rol_10_b_hi", &mut region, a_4, row)?;
                     row += 1;
 
                     // row = 48
@@ -1204,7 +1245,7 @@ mod tests {
                     )?;
 
                     rol_11_b_lo.copy_advice(|| "rol_11_b_lo", &mut region, a_3, row)?;
-                    rol_11_b_hi.copy_advice(|| "rol_11_b_lo", &mut region, a_4, row)?;
+                    rol_11_b_hi.copy_advice(|| "rol_11_b_hi", &mut region, a_4, row)?;
                     row += 1;
 
                     // row = 51
@@ -1232,7 +1273,7 @@ mod tests {
                     )?;
 
                     rol_12_b_lo.copy_advice(|| "rol_12_b_lo", &mut region, a_3, row)?;
-                    rol_12_b_hi.copy_advice(|| "rol_12_b_lo", &mut region, a_4, row)?;
+                    rol_12_b_hi.copy_advice(|| "rol_12_b_hi", &mut region, a_4, row)?;
                     row += 1;
 
                     // row = 54
@@ -1260,7 +1301,7 @@ mod tests {
                     )?;
 
                     rol_13_b_lo.copy_advice(|| "rol_13_b_lo", &mut region, a_3, row)?;
-                    rol_13_b_hi.copy_advice(|| "rol_13_b_lo", &mut region, a_4, row)?;
+                    rol_13_b_hi.copy_advice(|| "rol_13_b_hi", &mut region, a_4, row)?;
                     row += 1;
 
                     // row = 57
@@ -1288,7 +1329,7 @@ mod tests {
                     )?;
 
                     rol_14_b_lo.copy_advice(|| "rol_14_b_lo", &mut region, a_3, row)?;
-                    rol_14_b_hi.copy_advice(|| "rol_14_b_lo", &mut region, a_4, row)?;
+                    rol_14_b_hi.copy_advice(|| "rol_14_b_hi", &mut region, a_4, row)?;
                     row += 1;
 
                     // row = 60
@@ -1316,7 +1357,38 @@ mod tests {
                     )?;
 
                     rol_15_b_lo.copy_advice(|| "rol_15_b_lo", &mut region, a_3, row)?;
-                    rol_15_b_hi.copy_advice(|| "rol_15_b_lo", &mut region, a_4, row)?;
+                    rol_15_b_hi.copy_advice(|| "rol_15_b_hi", &mut region, a_4, row)?;
+                    row += 1;
+                    
+                    // row = 63
+                    // Testing sum1_gate
+                    let b_round_word_dense = RoundWordDense(spread_b_var_lo.clone().dense, spread_b_var_hi.clone().dense);
+                    let c_round_word_dense = RoundWordDense(spread_c_var_lo.clone().dense, spread_c_var_hi.clone().dense);
+                    let d_round_word_dense = RoundWordDense(spread_d_var_lo.clone().dense, spread_d_var_hi.clone().dense);
+                    let sum_dense =
+                    config.compression.assign_sum1(
+                        &mut region,
+                        row,
+                        b_round_word_dense,
+                        c_round_word_dense,
+                        d_round_word_dense,
+                        self.k,
+                    )?;
+                    row += 3; // sum1_gate requires three rows
+
+                    // row = 63
+                    config.compression.s_decompose_0.enable(&mut region, row)?;
+
+                    AssignedBits::<32>::assign(
+                        &mut region,
+                        || "sum_bcdk",
+                        a_5,
+                        row,
+                        Value::known(self.sum_bcdk),
+                    )?;
+
+                    sum_dense.0.copy_advice(|| "sum_lo", &mut region, a_3, row)?;
+                    sum_dense.1.copy_advice(|| "sum_hi", &mut region, a_4, row)?;
                     Ok(())
                 }
             )?;
@@ -1330,6 +1402,7 @@ mod tests {
         let b: u32 = rng.gen();
         let c: u32 = rng.gen();
         let d: u32 = rng.gen();
+        let k: u32 = rng.gen();
         let xor: u32 = b ^ c ^ d;
         let b_and_c: u32 = b & c;
         let neg_b_and_d: u32 = !b & d;
@@ -1345,11 +1418,15 @@ mod tests {
         let rol_13_b: u32 = rol(b, 13);
         let rol_14_b: u32 = rol(b, 14);
         let rol_15_b: u32 = rol(b, 15);
+        let sum_bcdk = b.overflowing_add(c).0
+            .overflowing_add(d).0
+            .overflowing_add(k).0;
 
         let circuit = CompressionGateTester {
             b,
             c,
             d,
+            k,
             xor,
             b_and_c,
             neg_b_and_d,
@@ -1365,6 +1442,7 @@ mod tests {
             rol_13_b,
             rol_14_b,
             rol_15_b,
+            sum_bcdk,
         };
 
         let prover = MockProver::run(17, &circuit, vec![]).unwrap();

@@ -727,8 +727,8 @@ impl CompressionConfig {
             word,
         )?;
 
-        word_lo.copy_advice(|| "xor_out_lo", region, a_3, row)?;
-        word_hi.copy_advice(|| "xor_out_hi", region, a_4, row)?;
+        word_lo.copy_advice(|| "word_lo", region, a_3, row)?;
+        word_hi.copy_advice(|| "word_hi", region, a_4, row)?;
 
         Ok(())
     }

@@ -705,4 +705,32 @@ impl CompressionConfig {
         ))
     }
 
+    pub(super) fn assign_decompose_0(
+        &self,
+        region: &mut Region<'_, pallas::Base>,
+        row: usize,
+        word_lo: AssignedBits<16>,
+        word_hi: AssignedBits<16>,
+        word: Value<u32>,
+    ) -> Result<(), Error> {
+        let a_3 = self.advice[0];
+        let a_4 = self.advice[1];
+        let a_5 = self.advice[2];
+
+        self.s_decompose_0.enable(region, row)?;
+
+        AssignedBits::<32>::assign(
+            region,
+            || "word(u32)",
+            a_5,
+            row,
+            word,
+        )?;
+
+        word_lo.copy_advice(|| "xor_out_lo", region, a_3, row)?;
+        word_hi.copy_advice(|| "xor_out_hi", region, a_4, row)?;
+
+        Ok(())
+    }
+
 }

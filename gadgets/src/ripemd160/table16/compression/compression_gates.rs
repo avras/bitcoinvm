@@ -820,7 +820,7 @@ mod tests {
     use rand::Rng;
 
     use crate::ripemd160::ref_impl::helper_functions::rol;
-    use crate::ripemd160::table16::{Table16Assignment, AssignedBits};
+    use crate::ripemd160::table16::Table16Assignment;
     use crate::ripemd160::table16::spread_table::{SpreadTableConfig, SpreadTableChip};
     use crate::ripemd160::table16::compression::{CompressionConfig, RoundWordDense};
 
@@ -991,22 +991,12 @@ mod tests {
                     )?;
                     row += 4; // f1 requires four rows
 
-                    config.compression.s_decompose_0.enable(&mut region, row)?;
 
                     // row = 10
-                    AssignedBits::<32>::assign(
-                        &mut region,
-                        || "xor_out",
-                        a_5,
-                        row,
-                        Value::known(self.xor),
-                    )?;
-
-                    xor_out_lo.copy_advice(|| "xor_out_lo", &mut region, a_3, row)?;
-                    xor_out_hi.copy_advice(|| "xor_out_hi", &mut region, a_4, row)?;
+                    config.compression.assign_decompose_0(&mut region, row, xor_out_lo, xor_out_hi, Value::known(self.xor))?;
+                    row += 1;
 
                     // Testing ch_gate
-                    row += 1;
                     // row = 11
                     let (b_and_c_lo, b_and_c_hi) =
                     config.compression.assign_ch(
@@ -1018,18 +1008,7 @@ mod tests {
                     row += 4; // ch requires four rows
 
                     // row = 15
-                    config.compression.s_decompose_0.enable(&mut region, row)?;
-
-                    AssignedBits::<32>::assign(
-                        &mut region,
-                        || "b_and_c",
-                        a_5,
-                        row,
-                        Value::known(self.b_and_c),
-                    )?;
-
-                    b_and_c_lo.copy_advice(|| "b_and_c_lo", &mut region, a_3, row)?;
-                    b_and_c_hi.copy_advice(|| "b_and_c_hi", &mut region, a_4, row)?;
+                    config.compression.assign_decompose_0(&mut region, row, b_and_c_lo, b_and_c_hi, Value::known(self.b_and_c))?;
                     row += 1;
 
 
@@ -1046,18 +1025,7 @@ mod tests {
 
 
                     // row = 20
-                    config.compression.s_decompose_0.enable(&mut region, row)?;
-
-                    AssignedBits::<32>::assign(
-                        &mut region,
-                        || "neg_b_and_d",
-                        a_5,
-                        row,
-                        Value::known(self.neg_b_and_d),
-                    )?;
-
-                    neg_b_and_c_lo.copy_advice(|| "b_and_c_lo", &mut region, a_3, row)?;
-                    neg_b_and_c_hi.copy_advice(|| "b_and_c_hi", &mut region, a_4, row)?;
+                    config.compression.assign_decompose_0(&mut region, row, neg_b_and_c_lo, neg_b_and_c_hi, Value::known(self.neg_b_and_d))?;
                     row += 1;
 
                     // row = 21
@@ -1074,18 +1042,13 @@ mod tests {
 
 
                     // row = 31
-                    config.compression.s_decompose_0.enable(&mut region, row)?;
-
-                    AssignedBits::<32>::assign(
+                    config.compression.assign_decompose_0(
                         &mut region,
-                        || "b_or_neg_c_xor_d",
-                        a_5,
                         row,
-                        Value::known(self.b_or_neg_c_xor_d),
+                        b_or_neg_c_xor_d_lo,
+                        b_or_neg_c_xor_d_hi,
+                        Value::known(self.b_or_neg_c_xor_d)
                     )?;
-
-                    b_or_neg_c_xor_d_lo.copy_advice(|| "b_or_neg_c_xor_d_lo", &mut region, a_3, row)?;
-                    b_or_neg_c_xor_d_hi.copy_advice(|| "b_or_neg_c_xor_d_hi", &mut region, a_4, row)?;
                     row += 1;
 
                     // row = 32
@@ -1102,18 +1065,7 @@ mod tests {
                     row += 2; // rotate_left_5 requires two rows
 
                     // row = 34
-                    config.compression.s_decompose_0.enable(&mut region, row)?;
-
-                    AssignedBits::<32>::assign(
-                        &mut region,
-                        || "rol_5_b",
-                        a_5,
-                        row,
-                        Value::known(self.rol_5_b),
-                    )?;
-
-                    rol_5_b_lo.copy_advice(|| "rol_5_b_lo", &mut region, a_3, row)?;
-                    rol_5_b_hi.copy_advice(|| "rol_5_b_hi", &mut region, a_4, row)?;
+                    config.compression.assign_decompose_0(&mut region, row, rol_5_b_lo, rol_5_b_hi, Value::known(self.rol_5_b))?;
                     row += 1;
 
                     // row = 35
@@ -1130,18 +1082,7 @@ mod tests {
                     row += 2; // rotate_left_6 requires two rows
 
                     // row = 37
-                    config.compression.s_decompose_0.enable(&mut region, row)?;
-
-                    AssignedBits::<32>::assign(
-                        &mut region,
-                        || "rol_6_b",
-                        a_5,
-                        row,
-                        Value::known(self.rol_6_b),
-                    )?;
-
-                    rol_6_b_lo.copy_advice(|| "rol_6_b_lo", &mut region, a_3, row)?;
-                    rol_6_b_hi.copy_advice(|| "rol_6_b_hi", &mut region, a_4, row)?;
+                    config.compression.assign_decompose_0(&mut region, row, rol_6_b_lo, rol_6_b_hi, Value::known(self.rol_6_b))?;
                     row += 1;
 
                     // row = 38
@@ -1158,18 +1099,7 @@ mod tests {
                     row += 2; // rotate_left_7 requires two rows
 
                     // row = 40
-                    config.compression.s_decompose_0.enable(&mut region, row)?;
-
-                    AssignedBits::<32>::assign(
-                        &mut region,
-                        || "rol_7_b",
-                        a_5,
-                        row,
-                        Value::known(self.rol_7_b),
-                    )?;
-
-                    rol_7_b_lo.copy_advice(|| "rol_7_b_lo", &mut region, a_3, row)?;
-                    rol_7_b_hi.copy_advice(|| "rol_7_b_hi", &mut region, a_4, row)?;
+                    config.compression.assign_decompose_0(&mut region, row, rol_7_b_lo, rol_7_b_hi, Value::known(self.rol_7_b))?;
                     row += 1;
 
                     // row = 39
@@ -1186,18 +1116,7 @@ mod tests {
                     row += 2; // rotate_left_8 requires two rows
 
                     // row = 41
-                    config.compression.s_decompose_0.enable(&mut region, row)?;
-
-                    AssignedBits::<32>::assign(
-                        &mut region,
-                        || "rol_8_b",
-                        a_5,
-                        row,
-                        Value::known(self.rol_8_b),
-                    )?;
-
-                    rol_8_b_lo.copy_advice(|| "rol_8_b_lo", &mut region, a_3, row)?;
-                    rol_8_b_hi.copy_advice(|| "rol_8_b_hi", &mut region, a_4, row)?;
+                    config.compression.assign_decompose_0(&mut region, row, rol_8_b_lo, rol_8_b_hi, Value::known(self.rol_8_b))?;
                     row += 1;
 
                     // row = 42
@@ -1214,18 +1133,7 @@ mod tests {
                     row += 2; // rotate_left_9 requires two rows
 
                     // row = 44
-                    config.compression.s_decompose_0.enable(&mut region, row)?;
-
-                    AssignedBits::<32>::assign(
-                        &mut region,
-                        || "rol_9_b",
-                        a_5,
-                        row,
-                        Value::known(self.rol_9_b),
-                    )?;
-
-                    rol_9_b_lo.copy_advice(|| "rol_9_b_lo", &mut region, a_3, row)?;
-                    rol_9_b_hi.copy_advice(|| "rol_9_b_hi", &mut region, a_4, row)?;
+                    config.compression.assign_decompose_0(&mut region, row, rol_9_b_lo, rol_9_b_hi, Value::known(self.rol_9_b))?;
                     row += 1;
 
                     // row = 45
@@ -1242,18 +1150,7 @@ mod tests {
                     row += 2; // rotate_left_10 requires two rows
 
                     // row = 47
-                    config.compression.s_decompose_0.enable(&mut region, row)?;
-
-                    AssignedBits::<32>::assign(
-                        &mut region,
-                        || "rol_10_b",
-                        a_5,
-                        row,
-                        Value::known(self.rol_10_b),
-                    )?;
-
-                    rol_10_b_lo.copy_advice(|| "rol_10_b_lo", &mut region, a_3, row)?;
-                    rol_10_b_hi.copy_advice(|| "rol_10_b_hi", &mut region, a_4, row)?;
+                    config.compression.assign_decompose_0(&mut region, row, rol_10_b_lo, rol_10_b_hi, Value::known(self.rol_10_b))?;
                     row += 1;
 
                     // row = 48
@@ -1270,18 +1167,7 @@ mod tests {
                     row += 2; // rotate_left_11 requires two rows
 
                     // row = 50
-                    config.compression.s_decompose_0.enable(&mut region, row)?;
-
-                    AssignedBits::<32>::assign(
-                        &mut region,
-                        || "rol_11_b",
-                        a_5,
-                        row,
-                        Value::known(self.rol_11_b),
-                    )?;
-
-                    rol_11_b_lo.copy_advice(|| "rol_11_b_lo", &mut region, a_3, row)?;
-                    rol_11_b_hi.copy_advice(|| "rol_11_b_hi", &mut region, a_4, row)?;
+                    config.compression.assign_decompose_0(&mut region, row, rol_11_b_lo, rol_11_b_hi, Value::known(self.rol_11_b))?;
                     row += 1;
 
                     // row = 51
@@ -1298,18 +1184,7 @@ mod tests {
                     row += 2; // rotate_left_12 requires two rows
 
                     // row = 53
-                    config.compression.s_decompose_0.enable(&mut region, row)?;
-
-                    AssignedBits::<32>::assign(
-                        &mut region,
-                        || "rol_12_b",
-                        a_5,
-                        row,
-                        Value::known(self.rol_12_b),
-                    )?;
-
-                    rol_12_b_lo.copy_advice(|| "rol_12_b_lo", &mut region, a_3, row)?;
-                    rol_12_b_hi.copy_advice(|| "rol_12_b_hi", &mut region, a_4, row)?;
+                    config.compression.assign_decompose_0(&mut region, row, rol_12_b_lo, rol_12_b_hi, Value::known(self.rol_12_b))?;
                     row += 1;
 
                     // row = 54
@@ -1326,18 +1201,7 @@ mod tests {
                     row += 2; // rotate_left_13 requires two rows
 
                     // row = 56
-                    config.compression.s_decompose_0.enable(&mut region, row)?;
-
-                    AssignedBits::<32>::assign(
-                        &mut region,
-                        || "rol_13_b",
-                        a_5,
-                        row,
-                        Value::known(self.rol_13_b),
-                    )?;
-
-                    rol_13_b_lo.copy_advice(|| "rol_13_b_lo", &mut region, a_3, row)?;
-                    rol_13_b_hi.copy_advice(|| "rol_13_b_hi", &mut region, a_4, row)?;
+                    config.compression.assign_decompose_0(&mut region, row, rol_13_b_lo, rol_13_b_hi, Value::known(self.rol_13_b))?;
                     row += 1;
 
                     // row = 57
@@ -1354,18 +1218,7 @@ mod tests {
                     row += 2; // rotate_left_14 requires two rows
 
                     // row = 59
-                    config.compression.s_decompose_0.enable(&mut region, row)?;
-
-                    AssignedBits::<32>::assign(
-                        &mut region,
-                        || "rol_14_b",
-                        a_5,
-                        row,
-                        Value::known(self.rol_14_b),
-                    )?;
-
-                    rol_14_b_lo.copy_advice(|| "rol_14_b_lo", &mut region, a_3, row)?;
-                    rol_14_b_hi.copy_advice(|| "rol_14_b_hi", &mut region, a_4, row)?;
+                    config.compression.assign_decompose_0(&mut region, row, rol_14_b_lo, rol_14_b_hi, Value::known(self.rol_14_b))?;
                     row += 1;
 
                     // row = 60
@@ -1382,18 +1235,7 @@ mod tests {
                     row += 2; // rotate_left_15 requires two rows
 
                     // row = 62
-                    config.compression.s_decompose_0.enable(&mut region, row)?;
-
-                    AssignedBits::<32>::assign(
-                        &mut region,
-                        || "rol_15_b",
-                        a_5,
-                        row,
-                        Value::known(self.rol_15_b),
-                    )?;
-
-                    rol_15_b_lo.copy_advice(|| "rol_15_b_lo", &mut region, a_3, row)?;
-                    rol_15_b_hi.copy_advice(|| "rol_15_b_hi", &mut region, a_4, row)?;
+                    config.compression.assign_decompose_0(&mut region, row, rol_15_b_lo, rol_15_b_hi, Value::known(self.rol_15_b))?;
                     row += 1;
                     
                     // row = 63
@@ -1413,18 +1255,7 @@ mod tests {
                     row += 3; // sum_afxk_gate requires three rows
 
                     // row = 66
-                    config.compression.s_decompose_0.enable(&mut region, row)?;
-
-                    AssignedBits::<32>::assign(
-                        &mut region,
-                        || "sum_bcdk",
-                        a_5,
-                        row,
-                        Value::known(self.sum_bcdk),
-                    )?;
-
-                    sum_dense.0.copy_advice(|| "sum_lo", &mut region, a_3, row)?;
-                    sum_dense.1.copy_advice(|| "sum_hi", &mut region, a_4, row)?;
+                    config.compression.assign_decompose_0(&mut region, row, sum_dense.0, sum_dense.1, Value::known(self.sum_bcdk))?;
                     row += 1;
                     
                     // row = 67
@@ -1441,18 +1272,8 @@ mod tests {
                     row += 2; // sum_re_gate requires two rows
 
                     // row = 69
-                    config.compression.s_decompose_0.enable(&mut region, row)?;
+                    config.compression.assign_decompose_0(&mut region, row, sum_dense.0, sum_dense.1, Value::known(self.sum_bc))?;
 
-                    AssignedBits::<32>::assign(
-                        &mut region,
-                        || "sum_bc",
-                        a_5,
-                        row,
-                        Value::known(self.sum_bc),
-                    )?;
-
-                    sum_dense.0.copy_advice(|| "sum_lo", &mut region, a_3, row)?;
-                    sum_dense.1.copy_advice(|| "sum_hi", &mut region, a_4, row)?;
                     Ok(())
                 }
             )?;

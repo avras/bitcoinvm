@@ -369,6 +369,7 @@ impl CompressionConfig {
         word: RoundWordDense,
         shift: u8,
     ) -> Result<(AssignedBits<16>, AssignedBits<16>), Error> {
+        assert!(shift > 4 && shift < 16);
         let a_3 = self.advice[0];
         let a_4 = self.advice[1];
         let a_5 = self.advice[2];
@@ -387,7 +388,6 @@ impl CompressionConfig {
         let rol_word_lo = AssignedBits::<16>::assign_bits(region, || "rol_word_lo", a_5, row, rol_word_lo)?;
         let rol_word_hi = AssignedBits::<16>::assign_bits(region, || "rol_word_hi", a_5, row + 1, rol_word_hi)?;
 
-        assert!(shift > 4 && shift < 16);
         let word_hi = word.1.value_u16().map(|a| i2lebsp::<16>(a.into()));
         let c: Value<[bool; 16]>= word.0.value_u16().map(|a| i2lebsp(a.into()).try_into().unwrap());
 
@@ -470,6 +470,30 @@ impl CompressionConfig {
 
             AssignedBits::<2>::assign_bits(region, || "b_lo(2)", a_3, row, b_lo)?;
             AssignedBits::<2>::assign_bits(region, || "b_hi(2)", a_3, row + 1, b_hi)?;
+        }
+        else if shift == 13 {
+            let a: Value<[bool; 13]> = word_hi.map(|q| q[3..].try_into().unwrap());
+            let a: Value<[bool; 16]> = a.map(|x| lebs2ip::<13>(&x)).map(|y| i2lebsp::<16>(y));
+            let b: Value<[bool; 3]> = word_hi.map(|q| q[0..3].try_into().unwrap());
+            self.assign_spread_word(region, &self.lookup, row, a, c)?;
+
+            AssignedBits::<3>::assign_bits(region, || "b(3)", a_3, row, b)?;
+        }
+        else if shift == 14 {
+            let a: Value<[bool; 14]> = word_hi.map(|q| q[2..].try_into().unwrap());
+            let a: Value<[bool; 16]> = a.map(|x| lebs2ip::<14>(&x)).map(|y| i2lebsp::<16>(y));
+            let b: Value<[bool; 2]> = word_hi.map(|q| q[0..2].try_into().unwrap());
+            self.assign_spread_word(region, &self.lookup, row, a, c)?;
+
+            AssignedBits::<2>::assign_bits(region, || "b(2)", a_3, row, b)?;
+        }
+        else {
+            let a: Value<[bool; 15]> = word_hi.map(|q| q[1..].try_into().unwrap());
+            let a: Value<[bool; 16]> = a.map(|x| lebs2ip::<15>(&x)).map(|y| i2lebsp::<16>(y));
+            let b: Value<[bool; 1]> = word_hi.map(|q| q[0..1].try_into().unwrap());
+            self.assign_spread_word(region, &self.lookup, row, a, c)?;
+
+            AssignedBits::<1>::assign_bits(region, || "b(1)", a_3, row, b)?;
         };
 
         Ok((rol_word_lo, rol_word_hi))

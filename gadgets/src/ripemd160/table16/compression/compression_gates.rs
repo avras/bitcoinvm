@@ -627,15 +627,15 @@ impl<F: FieldExt> CompressionGate<F> {
         let range_check_tag_a = Gate::range_check(tag_a, 0, 5); // tag <= 5 => a < 2^13
         let range_check_b= Gate::three_bit_range(b.clone());
 
-        let word_check = a.clone()
-        + b.clone() * F::from(1 << 13)
-        + c.clone() * F::from(1 << 16)
+        let word_check = c.clone()
+        + b.clone() * F::from(1 << 16)
+        + a.clone() * F::from(1 << 19)
         + word_lo * (-F::one())
         + word_hi * F::from(1 << 16) * (-F::one());
 
-        let rol_13_word_check = b
-        + c * F::from(1 << 3)
-        + a * F::from(1 << 19)
+        let rol_13_word_check = a
+        + c * F::from(1 << 13)
+        + b * F::from(1 << 29)
         + rol_13_word_lo * (-F::one())
         + rol_13_word_hi * F::from(1 << 16) * (-F::one());
 
@@ -672,15 +672,15 @@ impl<F: FieldExt> CompressionGate<F> {
         let range_check_tag_a = Gate::range_check(tag_a, 0, 6); // tag <= 6 => a < 2^14
         let range_check_b= Gate::two_bit_range(b.clone());
 
-        let word_check = a.clone()
-        + b.clone() * F::from(1 << 14)
-        + c.clone() * F::from(1 << 16)
+        let word_check = c.clone()
+        + b.clone() * F::from(1 << 16)
+        + a.clone() * F::from(1 << 18)
         + word_lo * (-F::one())
         + word_hi * F::from(1 << 16) * (-F::one());
 
-        let rol_14_word_check = b
-        + c * F::from(1 << 2)
-        + a * F::from(1 << 18)
+        let rol_14_word_check = a
+        + c * F::from(1 << 14)
+        + b * F::from(1 << 30)
         + rol_14_word_lo * (-F::one())
         + rol_14_word_hi * F::from(1 << 16) * (-F::one());
 
@@ -717,15 +717,15 @@ impl<F: FieldExt> CompressionGate<F> {
         let range_check_tag_a = Gate::range_check(tag_a, 0, 7); // tag <= 7 => a < 2^15
         let range_check_b= Gate::range_check(b.clone(), 0, 1);
 
-        let word_check = a.clone()
-        + b.clone() * F::from(1 << 14)
-        + c.clone() * F::from(1 << 16)
+        let word_check = c.clone()
+        + b.clone() * F::from(1 << 16)
+        + a.clone() * F::from(1 << 17)
         + word_lo * (-F::one())
         + word_hi * F::from(1 << 16) * (-F::one());
 
-        let rol_15_word_check = b
-        + c * F::from(1 << 2)
-        + a * F::from(1 << 18)
+        let rol_15_word_check = a
+        + c * F::from(1 << 15)
+        + b * F::from(1 << 31)
         + rol_15_word_lo * (-F::one())
         + rol_15_word_hi * F::from(1 << 16) * (-F::one());
 
@@ -775,6 +775,9 @@ mod tests {
         pub rol_10_b: u32,
         pub rol_11_b: u32,
         pub rol_12_b: u32,
+        pub rol_13_b: u32,
+        pub rol_14_b: u32,
+        pub rol_15_b: u32,
     }
 
     impl Circuit<Fp> for CompressionGateTester {
@@ -798,6 +801,9 @@ mod tests {
                 rol_10_b: 0,
                 rol_11_b: 0,
                 rol_12_b: 0,
+                rol_13_b: 0,
+                rol_14_b: 0,
+                rol_15_b: 0,
             }
         }
 
@@ -1227,6 +1233,90 @@ mod tests {
 
                     rol_12_b_lo.copy_advice(|| "rol_12_b_lo", &mut region, a_3, row)?;
                     rol_12_b_hi.copy_advice(|| "rol_12_b_lo", &mut region, a_4, row)?;
+                    row += 1;
+
+                    // row = 54
+                    // Testing rotate_left_13 gate
+                    let b_round_word_dense =
+                        RoundWordDense(spread_b_var_lo.clone().dense, spread_b_var_hi.clone().dense);
+                    let (rol_13_b_lo, rol_13_b_hi) =
+                    config.compression.assign_rotate_left(
+                        &mut region,
+                        row,
+                        b_round_word_dense,
+                        13
+                    )?;
+                    row += 2; // rotate_left_13 requires two rows
+
+                    // row = 56
+                    config.compression.s_decompose_0.enable(&mut region, row)?;
+
+                    AssignedBits::<32>::assign(
+                        &mut region,
+                        || "rol_13_b",
+                        a_5,
+                        row,
+                        Value::known(self.rol_13_b),
+                    )?;
+
+                    rol_13_b_lo.copy_advice(|| "rol_13_b_lo", &mut region, a_3, row)?;
+                    rol_13_b_hi.copy_advice(|| "rol_13_b_lo", &mut region, a_4, row)?;
+                    row += 1;
+
+                    // row = 57
+                    // Testing rotate_left_14 gate
+                    let b_round_word_dense =
+                        RoundWordDense(spread_b_var_lo.clone().dense, spread_b_var_hi.clone().dense);
+                    let (rol_14_b_lo, rol_14_b_hi) =
+                    config.compression.assign_rotate_left(
+                        &mut region,
+                        row,
+                        b_round_word_dense,
+                        14
+                    )?;
+                    row += 2; // rotate_left_14 requires two rows
+
+                    // row = 59
+                    config.compression.s_decompose_0.enable(&mut region, row)?;
+
+                    AssignedBits::<32>::assign(
+                        &mut region,
+                        || "rol_14_b",
+                        a_5,
+                        row,
+                        Value::known(self.rol_14_b),
+                    )?;
+
+                    rol_14_b_lo.copy_advice(|| "rol_14_b_lo", &mut region, a_3, row)?;
+                    rol_14_b_hi.copy_advice(|| "rol_14_b_lo", &mut region, a_4, row)?;
+                    row += 1;
+
+                    // row = 60
+                    // Testing rotate_left_15 gate
+                    let b_round_word_dense =
+                        RoundWordDense(spread_b_var_lo.clone().dense, spread_b_var_hi.clone().dense);
+                    let (rol_15_b_lo, rol_15_b_hi) =
+                    config.compression.assign_rotate_left(
+                        &mut region,
+                        row,
+                        b_round_word_dense,
+                        15
+                    )?;
+                    row += 2; // rotate_left_15 requires two rows
+
+                    // row = 62
+                    config.compression.s_decompose_0.enable(&mut region, row)?;
+
+                    AssignedBits::<32>::assign(
+                        &mut region,
+                        || "rol_15_b",
+                        a_5,
+                        row,
+                        Value::known(self.rol_15_b),
+                    )?;
+
+                    rol_15_b_lo.copy_advice(|| "rol_15_b_lo", &mut region, a_3, row)?;
+                    rol_15_b_hi.copy_advice(|| "rol_15_b_lo", &mut region, a_4, row)?;
                     Ok(())
                 }
             )?;
@@ -1252,6 +1342,9 @@ mod tests {
         let rol_10_b: u32 = rol(b, 10);
         let rol_11_b: u32 = rol(b, 11);
         let rol_12_b: u32 = rol(b, 12);
+        let rol_13_b: u32 = rol(b, 13);
+        let rol_14_b: u32 = rol(b, 14);
+        let rol_15_b: u32 = rol(b, 15);
 
         let circuit = CompressionGateTester {
             b,
@@ -1269,6 +1362,9 @@ mod tests {
             rol_10_b,
             rol_11_b,
             rol_12_b,
+            rol_13_b,
+            rol_14_b,
+            rol_15_b,
         };
 
         let prover = MockProver::run(17, &circuit, vec![]).unwrap();

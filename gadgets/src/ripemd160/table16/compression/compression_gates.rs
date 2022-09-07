@@ -205,7 +205,7 @@ impl<F: FieldExt> CompressionGate<F> {
     }
 
     // Gate for rotate_left(W, 5)
-    // word = (a,b,c) = (5, 11, 16) chunks with a = (a_lo, a_hi) = (2, 3) chunks
+    // word = (a,b,c) = (5, 11, 16) chunks with a = (a_hi, a_lo) = (3, 2) chunks
     #[allow(clippy::too_many_arguments)]
     pub fn rotate_left_5_gate(
         s_rotate_left_5: Expression<F>,
@@ -255,7 +255,7 @@ impl<F: FieldExt> CompressionGate<F> {
     }
 
     // Gate for rotate_left(W, 6)
-    // word = (a,b,c) = (6, 10, 16) chunks with a = (a_lo, a_hi) = (3, 3) chunks
+    // word = (a,b,c) = (6, 10, 16) chunks with a = (a_hi, a_lo) = (3, 3) chunks
     #[allow(clippy::too_many_arguments)]
     pub fn rotate_left_6_gate(
         s_rotate_left_6: Expression<F>,
@@ -305,7 +305,7 @@ impl<F: FieldExt> CompressionGate<F> {
     }
 
     // Gate for rotate_left(W, 7)
-    // word = (a,b,c) = (7, 9, 16) chunks with a = (a_lo, a_hi) = (3, 4) chunks
+    // word = (a,b,c) = (7, 9, 16) chunks with a = (a_hi, a_lo) = (4, 3) chunks
     #[allow(clippy::too_many_arguments)]
     pub fn rotate_left_7_gate(
         s_rotate_left_7: Expression<F>,
@@ -355,7 +355,7 @@ impl<F: FieldExt> CompressionGate<F> {
     }
 
     // Gate for rotate_left(W, 8)
-    // word = (a,b,c) = (8, 8, 16) chunks with a = (a_lo, a_hi) = (4, 4) chunks
+    // word = (a,b,c) = (8, 8, 16) chunks with a = (a_hi, a_lo) = (4, 4) chunks
     #[allow(clippy::too_many_arguments)]
     pub fn rotate_left_8_gate(
         s_rotate_left_8: Expression<F>,

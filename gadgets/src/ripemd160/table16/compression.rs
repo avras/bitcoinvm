@@ -67,6 +67,7 @@ pub(super) struct CompressionConfig {
 
     s_decompose_0: Selector,
     s_f1: Selector,
+    s_f2f4: Selector,
     s_ch: Selector,
     s_ch_neg: Selector,
     s_or_not_xor: Selector,
@@ -85,6 +86,7 @@ impl CompressionConfig {
         s_decompose_0: Selector, 
     ) -> Self {
         let s_f1 = meta.selector();
+        let s_f2f4 = meta.selector();
         let s_ch = meta.selector();
         let s_ch_neg = meta.selector();
         let s_or_not_xor = meta.selector();
@@ -151,6 +153,73 @@ impl CompressionConfig {
             )
         });
 
+        // s_f2 on b, c, d words
+        // The f4 gate is the same as the f2 gate with arguments (D, B, C) instead of (B, C, D)
+        // s_f2f4 | a_0 |   a_1    |       a_2       |    a_3       |    a_4      |    a_5           |
+        //   1    |     | P_0_even | spread_P_0_even | spread_X_lo  | spread_Y_lo |                  | 
+        //        |     | P_0_odd  | spread_P_0_odd  | spread_X_hi  | spread_Y_hi |                  | 
+        //        |     | P_1_even | spread_P_1_even |              |             |                  | 
+        //        |     | P_1_odd  | spread_P_1_odd  |              |             |                  | 
+        //        |     | Q_0_even | spread_Q_0_even |              | spread_Z_lo | spread_neg_X_lo  | 
+        //        |     | Q_0_odd  | spread_Q_0_odd  |              | spread_Z_hi | spread_neg_X_hi  | 
+        //        |     | Q_1_even | spread_Q_1_even | sum_lo       | carry       |                  | 
+        //        |     | Q_1_odd  | spread_Q_1_odd  | sum_hi       |             |                  | 
+        // 
+        meta.create_gate("s_f2f4", |meta| {
+            let s_f2f4 = meta.query_selector(s_f2f4);
+            let spread_p0_even = meta.query_advice(a_2, Rotation(0));
+            let spread_p0_odd  = meta.query_advice(a_2, Rotation(1));
+            let p0_odd  = meta.query_advice(a_1, Rotation(1));
+            let spread_p1_even = meta.query_advice(a_2, Rotation(2));
+            let spread_p1_odd  = meta.query_advice(a_2, Rotation(3));
+            let p1_odd  = meta.query_advice(a_1, Rotation(3));
+            let spread_q0_even = meta.query_advice(a_2, Rotation(4));
+            let spread_q0_odd  = meta.query_advice(a_2, Rotation(5));
+            let q0_odd  = meta.query_advice(a_1, Rotation(5));
+            let spread_q1_even = meta.query_advice(a_2, Rotation(6));
+            let spread_q1_odd  = meta.query_advice(a_2, Rotation(7));
+            let q1_odd  = meta.query_advice(a_1, Rotation(7));
+            let spread_b_lo = meta.query_advice(a_3, Rotation::cur());
+            let spread_b_hi = meta.query_advice(a_3, Rotation::next());
+            let spread_c_lo = meta.query_advice(a_4, Rotation::cur());
+            let spread_c_hi = meta.query_advice(a_4, Rotation::next());
+            let spread_d_lo = meta.query_advice(a_4, Rotation(4));
+            let spread_d_hi = meta.query_advice(a_4, Rotation(5));
+            let spread_b_neg_lo = meta.query_advice(a_5, Rotation(4));
+            let spread_b_neg_hi = meta.query_advice(a_5, Rotation(5));
+            let sum_lo = meta.query_advice(a_3, Rotation(6));
+            let sum_hi = meta.query_advice(a_3, Rotation(7));
+            let carry = meta.query_advice(a_4, Rotation(6));
+            
+            
+            CompressionGate::f2_gate(
+                s_f2f4,
+                spread_p0_even,
+                spread_p0_odd,
+                spread_p1_even,
+                spread_p1_odd,
+                p0_odd,
+                p1_odd,
+                spread_q0_even,
+                spread_q0_odd,
+                spread_q1_even,
+                spread_q1_odd,
+                q0_odd,
+                q1_odd,
+                spread_b_lo,
+                spread_b_hi,
+                spread_c_lo,
+                spread_c_hi,
+                spread_d_lo,
+                spread_d_hi,
+                spread_b_neg_lo,
+                spread_b_neg_hi,
+                sum_lo,
+                sum_hi,
+                carry,
+            )
+        });
+        
         // s_ch on b, c words
         meta.create_gate("s_ch", |meta| {
             let s_ch = meta.query_selector(s_ch);
@@ -591,6 +660,7 @@ impl CompressionConfig {
             advice,
             s_decompose_0,
             s_f1,
+            s_f2f4,
             s_ch,
             s_ch_neg,
             s_or_not_xor,

@@ -41,6 +41,93 @@ impl<F: FieldExt> CompressionGate<F> {
         Some(("maj", s_f1 * (sum - xor)))
     }
 
+    // Gate for f2(B, C, D) = (B & C) | (!B & D)
+    // Used also for f4
+    // f4(B, C, D) = (B & D) | (C & !D)
+    // Output is in sum_lo, sum_hi
+    #[allow(clippy::too_many_arguments)]
+    pub fn f2_gate(
+        s_f2f4: Expression<F>,
+        spread_p0_even: Expression<F>,
+        spread_p0_odd: Expression<F>,
+        spread_p1_even: Expression<F>,
+        spread_p1_odd: Expression<F>,
+        p0_odd: Expression<F>,
+        p1_odd: Expression<F>,
+        spread_q0_even: Expression<F>,
+        spread_q0_odd: Expression<F>,
+        spread_q1_even: Expression<F>,
+        spread_q1_odd: Expression<F>,
+        q0_odd: Expression<F>,
+        q1_odd: Expression<F>,
+        spread_b_lo: Expression<F>,
+        spread_b_hi: Expression<F>,
+        spread_c_lo: Expression<F>,
+        spread_c_hi: Expression<F>,
+        spread_d_lo: Expression<F>,
+        spread_d_hi: Expression<F>,
+        spread_b_neg_lo: Expression<F>,
+        spread_b_neg_hi: Expression<F>,
+        sum_lo: Expression<F>,
+        sum_hi: Expression<F>,
+        carry: Expression<F>,
+    )  -> Constraints<
+        F,
+        (&'static str, Expression<F>),
+        impl Iterator<Item = (&'static str, Expression<F>)>,
+    > {
+        let p_lhs_lo = spread_b_lo.clone() + spread_c_lo;
+        let p_lhs_hi = spread_b_hi.clone() + spread_c_hi;
+        let p_lhs = p_lhs_lo + p_lhs_hi * F::from(1 << 32);
+
+        let p_rhs_even = spread_p0_even + spread_p1_even * F::from(1 << 32);
+        let p_rhs_odd = spread_p0_odd.clone() + spread_p1_odd.clone() * F::from(1 << 32);
+        let p_rhs = p_rhs_even + p_rhs_odd * F::from(2);
+
+        let p_check = p_lhs + p_rhs * -F::one();
+
+        let neg_check = {
+            let evens = Self::ones() * F::from(MASK_EVEN_32 as u64);
+            // evens - spread_x_lo = spread_x_neg_lo
+            let lo_check = spread_b_neg_lo.clone() + spread_b_lo + (evens.clone() * (-F::one()));
+            // evens - spread_x_hi = spread_x_neg_hi
+            let hi_check = spread_b_neg_hi.clone() + spread_b_hi + (evens * (-F::one()));
+
+            std::iter::empty()
+                .chain(Some(("lo_check", lo_check)))
+                .chain(Some(("hi_check", hi_check)))
+        };
+
+        let q_lhs_lo = spread_b_neg_lo + spread_d_lo;
+        let q_lhs_hi = spread_b_neg_hi + spread_d_hi;
+        let q_lhs = q_lhs_lo + q_lhs_hi * F::from(1 << 32);
+
+        let q_rhs_even = spread_q0_even + spread_q1_even * F::from(1 << 32);
+        let q_rhs_odd = spread_q0_odd.clone() + spread_q1_odd.clone() * F::from(1 << 32);
+        let q_rhs = q_rhs_even + q_rhs_odd * F::from(2);
+
+        let q_check = q_lhs + q_rhs * -F::one();
+
+        let range_check_carry = Gate::range_check(carry.clone(), 0, 0);
+
+        let lo = p0_odd + q0_odd;
+        let hi = p1_odd + q1_odd;
+        let sum = lo + hi * F::from(1 << 16);
+        let mod_sum = sum_lo + sum_hi * F::from(1 << 16);
+
+        let sum_check = sum - (carry * F::from(1 << 32)) - mod_sum;
+
+        Constraints::with_selector(
+            s_f2f4,
+            std::iter::empty()
+                .chain(neg_check)
+                .chain(Some(("p_check", p_check)))
+                .chain(Some(("q_check", q_check)))
+                .chain(Some(("sum_f2f4", sum_check)))
+                .chain(Some(("range_check_carry", range_check_carry)))
+        )
+    }
+
     // First part of choice gate on (X, Y, Z), X & Y
     // Used in both f2 and f4
     // f2(B, C, D) = (B & C) | (!B & D)
@@ -819,7 +906,7 @@ mod tests {
     use halo2::dev::MockProver;
     use rand::Rng;
 
-    use crate::ripemd160::ref_impl::helper_functions::rol;
+    use crate::ripemd160::ref_impl::helper_functions::{rol, f2, f4};
     use crate::ripemd160::table16::Table16Assignment;
     use crate::ripemd160::table16::spread_table::{SpreadTableConfig, SpreadTableChip};
     use crate::ripemd160::table16::compression::{CompressionConfig, RoundWordDense};
@@ -836,6 +923,8 @@ mod tests {
         pub d: u32,
         pub k: u32,
         pub xor: u32,
+        pub f2_bcd: u32,
+        pub f4_bcd: u32,
         pub b_and_c: u32,
         pub neg_b_and_d: u32,
         pub b_or_neg_c_xor_d: u32,
@@ -865,6 +954,8 @@ mod tests {
                 d: 0,
                 k: 0,
                 xor: 0,
+                f2_bcd: 0,
+                f4_bcd: 0,
                 b_and_c: 0,
                 neg_b_and_d: 0,
                 b_or_neg_c_xor_d: 0,
@@ -994,6 +1085,40 @@ mod tests {
 
                     // row = 10
                     config.compression.assign_decompose_0(&mut region, row, xor_out_lo, xor_out_hi, Value::known(self.xor))?;
+                    row += 1;
+
+                    // row = 11
+                    // Testing f2_gate
+                    let (f2_bcd_lo, f2_bcd_hi) =
+                    config.compression.assign_f2(
+                        &mut region,
+                        row,
+                        spread_halves_b.clone().into(), 
+                        spread_halves_c.clone().into(),
+                        spread_halves_d.clone().into(),
+                    )?;
+                    row += 8; // f2 requires eight rows
+
+
+                    // row = 19
+                    config.compression.assign_decompose_0(&mut region, row, f2_bcd_lo, f2_bcd_hi, Value::known(self.f2_bcd))?;
+                    row += 1;
+
+                    // row = 20
+                    // Testing f4_gate
+                    let (f4_bcd_lo, f4_bcd_hi) =
+                    config.compression.assign_f4(
+                        &mut region,
+                        row,
+                        spread_halves_b.clone().into(), 
+                        spread_halves_c.clone().into(),
+                        spread_halves_d.clone().into(),
+                    )?;
+                    row += 8; // f4 requires eight rows
+
+
+                    // row = 28
+                    config.compression.assign_decompose_0(&mut region, row, f4_bcd_lo, f4_bcd_hi, Value::known(self.f4_bcd))?;
                     row += 1;
 
                     // Testing ch_gate
@@ -1289,6 +1414,8 @@ mod tests {
         let d: u32 = rng.gen();
         let k: u32 = rng.gen();
         let xor: u32 = b ^ c ^ d;
+        let f2_bcd: u32 = f2(b, c, d);
+        let f4_bcd: u32 = f4(b, c, d);
         let b_and_c: u32 = b & c;
         let neg_b_and_d: u32 = !b & d;
         let b_or_neg_c_xor_d: u32 = (b | !c) ^ d;
@@ -1314,6 +1441,8 @@ mod tests {
             d,
             k,
             xor,
+            f2_bcd,
+            f4_bcd,
             b_and_c,
             neg_b_and_d,
             b_or_neg_c_xor_d,

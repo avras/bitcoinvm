@@ -89,6 +89,151 @@ impl CompressionConfig {
         Ok(even)
     }
 
+    // s_f2f4 | a_0 |   a_1    |       a_2       |    a_3       |    a_4      |    a_5           |
+    //   1    |     | P_0_even | spread_P_0_even | spread_X_lo  | spread_Y_lo |                  | 
+    //        |     | P_0_odd  | spread_P_0_odd  | spread_X_hi  | spread_Y_hi |                  | 
+    //        |     | P_1_even | spread_P_1_even |              |             |                  | 
+    //        |     | P_1_odd  | spread_P_1_odd  |              |             |                  | 
+    //        |     | Q_0_even | spread_Q_0_even |              | spread_Z_lo | spread_neg_X_lo  | 
+    //        |     | Q_0_odd  | spread_Q_0_odd  |              | spread_Z_hi | spread_neg_X_hi  | 
+    //        |     | Q_1_even | spread_Q_1_even | sum_lo       | carry       |                  | 
+    //        |     | Q_1_odd  | spread_Q_1_odd  | sum_hi       |             |                  | 
+    // 
+    // Output is sum_lo, sum_hi
+    pub(super) fn assign_f2(
+        &self,
+        region: &mut Region<'_, pallas::Base>,
+        row: usize,
+        spread_halves_x: RoundWordSpread,
+        spread_halves_y: RoundWordSpread,
+        spread_halves_z: RoundWordSpread,
+    ) -> Result<(AssignedBits<16>, AssignedBits<16>), Error> {
+        let a_3 = self.advice[0];
+        let a_4 = self.advice[1];
+        let a_5 = self.advice[2];
+
+        self.s_f2f4.enable(region, row)?;
+
+        // Assigning top four rows
+        // Assign and copy spread_x_lo, spread_x_hi
+        spread_halves_x.0.copy_advice(|| "spread_x_lo", region, a_3, row)?;
+        spread_halves_x.1.copy_advice(|| "spread_x_hi", region, a_3, row + 1)?;
+
+        // Assign and copy spread_y_lo, spread_y_hi
+        spread_halves_y.0.copy_advice(|| "spread_y_lo", region, a_4, row)?;
+        spread_halves_y.1.copy_advice(|| "spread_y_hi", region, a_4, row + 1)?;
+
+        let p: Value<[bool; 64]> = spread_halves_x
+            .value()
+            .zip(spread_halves_y.value())
+            .map(|(e, f)| i2lebsp(e + f));
+
+        let p_0: Value<[bool; 32]> = p.map(|p| p[..32].try_into().unwrap());
+        let p_0_even = p_0.map(even_bits);
+        let p_0_odd = p_0.map(odd_bits);
+
+        let p_1: Value<[bool; 32]> = p.map(|p| p[32..].try_into().unwrap());
+        let p_1_even = p_1.map(even_bits);
+        let p_1_odd = p_1.map(odd_bits);
+
+        let p_odd_halves = self.assign_ch_outputs(region, row, p_0_even, p_0_odd, p_1_even, p_1_odd)?;
+
+        // Assigning bottom four rows
+        // Assign and copy spread_z_lo, spread_z_hi
+        spread_halves_z.0.copy_advice(|| "spread_z_lo", region, a_4, row + 4)?;
+        spread_halves_z.1.copy_advice(|| "spread_z_hi", region, a_4, row + 5)?;
+
+        // Calculate neg_x_lo
+        let spread_neg_x_lo = spread_halves_x
+            .0
+            .value()
+            .map(|spread_x_lo| negate_spread(spread_x_lo.0));
+        // Assign spread_neg_x_lo
+        AssignedBits::<32>::assign_bits(
+            region,
+            || "spread_neg_x_lo",
+            a_5,
+            row + 4,
+            spread_neg_x_lo,
+        )?;
+
+        // Calculate neg_x_hi
+        let spread_neg_x_hi = spread_halves_x
+            .1
+            .value()
+            .map(|spread_x_hi| negate_spread(spread_x_hi.0));
+        // Assign spread_neg_x_hi
+        AssignedBits::<32>::assign_bits(
+            region,
+            || "spread_neg_x_hi",
+            a_5,
+            row + 5,
+            spread_neg_x_hi,
+        )?;
+
+        let q: Value<[bool; 64]> = {
+            let spread_neg_x = spread_neg_x_lo
+                .zip(spread_neg_x_hi)
+                .map(|(lo, hi)| lebs2ip(&lo) + (1 << 32) * lebs2ip(&hi));
+            spread_neg_x
+                .zip(spread_halves_z.value())
+                .map(|(neg_x, z)| i2lebsp(neg_x + z))
+        };
+
+        let q_0: Value<[bool; 32]> = q.map(|q| q[..32].try_into().unwrap());
+        let q_0_even = q_0.map(even_bits);
+        let q_0_odd = q_0.map(odd_bits);
+
+        let q_1: Value<[bool; 32]> = q.map(|q| q[32..].try_into().unwrap());
+        let q_1_even = q_1.map(even_bits);
+        let q_1_odd = q_1.map(odd_bits);
+
+        let q_odd_halves = self.assign_ch_outputs(region, row + 4, q_0_even, q_0_odd, q_1_even, q_1_odd)?;
+
+        let (sum, carry) = sum_with_carry(vec![
+            (p_odd_halves.0.value_u16(), p_odd_halves.1.value_u16()),
+            (q_odd_halves.0.value_u16(), q_odd_halves.1.value_u16()),
+        ]);
+        
+        let sum: Value<[bool; 32]> = sum.map(|w| i2lebsp(w.into()));
+        let sum_lo: Value<[bool; 16]> = sum.map(|w| w[..16].try_into().unwrap());
+        let sum_hi: Value<[bool; 16]> = sum.map(|w| w[16..].try_into().unwrap());
+
+        let sum_lo = AssignedBits::<16>::assign_bits(region, || "sum_lo", a_3, row + 6, sum_lo)?;
+        let sum_hi = AssignedBits::<16>::assign_bits(region, || "sum_hi", a_3, row + 7, sum_hi)?;
+
+        region.assign_advice(
+            || "f2f4_carry",
+            a_4,
+            row + 6,
+            || carry.map(|value| pallas::Base::from(value as u64)),
+        )?;
+
+        Ok((sum_lo, sum_hi))
+    }
+
+    // s_f2f4 | a_0 |   a_1    |       a_2       |    a_3       |    a_4      |    a_5           |
+    //   1    |     | P_0_even | spread_P_0_even | spread_Z_lo  | spread_X_lo |                  | 
+    //        |     | P_0_odd  | spread_P_0_odd  | spread_Z_hi  | spread_X_hi |                  | 
+    //        |     | P_1_even | spread_P_1_even |              |             |                  | 
+    //        |     | P_1_odd  | spread_P_1_odd  |              |             |                  | 
+    //        |     | Q_0_even | spread_Q_0_even |              | spread_Y_lo | spread_neg_Z_lo  | 
+    //        |     | Q_0_odd  | spread_Q_0_odd  |              | spread_Y_hi | spread_neg_Z_hi  | 
+    //        |     | Q_1_even | spread_Q_1_even | sum_lo       | carry       |                  | 
+    //        |     | Q_1_odd  | spread_Q_1_odd  | sum_hi       |             |                  | 
+    // 
+    // Output is sum_lo, sum_hi
+    pub(super) fn assign_f4(
+        &self,
+        region: &mut Region<'_, pallas::Base>,
+        row: usize,
+        spread_halves_x: RoundWordSpread,
+        spread_halves_y: RoundWordSpread,
+        spread_halves_z: RoundWordSpread,
+    ) -> Result<(AssignedBits<16>, AssignedBits<16>), Error> {
+        self.assign_f2(region, row, spread_halves_z, spread_halves_x, spread_halves_y)
+    }
+
     // s_ch | a_0 |   a_1    |       a_2       |    a_3      |    a_4      |    a_5      |
     //   1  |     | P_0_even | spread_P_0_even | spread_X_lo | spread_Y_lo |             | 
     //      |     | P_0_odd  | spread_P_0_odd  | spread_X_hi | spread_Y_hi |             | 
@@ -131,11 +276,11 @@ impl CompressionConfig {
         self.assign_ch_outputs(region, row, p_0_even, p_0_odd, p_1_even, p_1_odd)
     }
 
-    // s_ch_neg | a_0 |   a_1    |       a_2       |    a_3          |    a_4      |    a_5      |
-    //   1      |     | Q_0_even | spread_Q_0_even | spread_neg_X_lo | spread_Z_lo | spread_X_lo | 
-    //          |     | Q_0_odd  | spread_Q_0_odd  | spread_neg_X_hi | spread_Z_hi | spread_X_hi | 
-    //          |     | Q_1_even | spread_Q_1_even |                 |             |             | 
-    //          |     | Q_1_odd  | spread_Q_1_odd  |                 |             |             | 
+    // s_ch_neg | a_0 |   a_1    |       a_2       |    a_3      |    a_4      |    a_5          |
+    //   1      |     | Q_0_even | spread_Q_0_even | spread_X_lo | spread_Z_lo | spread_neg_X_lo | 
+    //          |     | Q_0_odd  | spread_Q_0_odd  | spread_X_hi | spread_Z_hi | spread_neg_X_hi | 
+    //          |     | Q_1_even | spread_Q_1_even |             |             |                 | 
+    //          |     | Q_1_odd  | spread_Q_1_odd  |             |             |                 | 
     // 
     pub(super) fn assign_ch_neg(
         &self,

@@ -68,9 +68,7 @@ pub(super) struct CompressionConfig {
     s_decompose_0: Selector,
     s_f1: Selector,
     s_f2f4: Selector,
-    s_ch: Selector,
-    s_ch_neg: Selector,
-    s_or_not_xor: Selector,
+    s_f3f5: Selector,
     s_rotate_left: [Selector; 11], // Rotate left with shifts from 5 to 15 (inclusive)
     s_sum_afxk: Selector,
     s_sum_re: Selector,
@@ -87,9 +85,7 @@ impl CompressionConfig {
     ) -> Self {
         let s_f1 = meta.selector();
         let s_f2f4 = meta.selector();
-        let s_ch = meta.selector();
-        let s_ch_neg = meta.selector();
-        let s_or_not_xor = meta.selector();
+        let s_f3f5 = meta.selector();
         let s_rotate_left = [
             meta.selector(),
             meta.selector(),
@@ -220,10 +216,11 @@ impl CompressionConfig {
             )
         });
         
-        // s_or_not_xor on b, c, d words
+        // s_f3 on b, c, d words
+        // The f5 gate is the same as the f3 gate with arguments (C, D, B) instead of (B, C, D)
         // (b | !c) ^ d
-        meta.create_gate("s_or_not_xor", |meta| {
-            let s_or_not_xor = meta.query_selector(s_or_not_xor);
+        meta.create_gate("s_f3f5", |meta| {
+            let s_f3f5 = meta.query_selector(s_f3f5);
             let spread_sum0_even = meta.query_advice(a_2, Rotation(0));
             let spread_sum0_odd  = meta.query_advice(a_2, Rotation(1));
             let spread_sum1_even = meta.query_advice(a_2, Rotation(2));
@@ -243,8 +240,8 @@ impl CompressionConfig {
             let spread_d_lo = meta.query_advice(a_3, Rotation(4));
             let spread_d_hi = meta.query_advice(a_3, Rotation(5));
             
-            CompressionGate::or_not_xor_gate(
-                s_or_not_xor,
+            CompressionGate::s_f3(
+                s_f3f5,
                 spread_r0_even,
                 spread_r0_odd,
                 spread_r1_even,
@@ -606,9 +603,7 @@ impl CompressionConfig {
             s_decompose_0,
             s_f1,
             s_f2f4,
-            s_ch,
-            s_ch_neg,
-            s_or_not_xor,
+            s_f3f5,
             s_rotate_left,
             s_sum_afxk,
             s_sum_re,

@@ -256,19 +256,19 @@ impl CompressionConfig {
         Ok(odd)
     }
 
-    // s_or_not_xor | a_0 |   a_1       |       a_2         |    a_3          |    a_4      |    a_5      |
-    //   1          |     | sum_0_even  | spread_sum_0_even | spread_neg_Y_lo | spread_X_lo | spread_Y_lo | 
-    //              |     | sum_0_odd   | spread_sum_0_odd  | spread_neg_Y_hi | spread_X_hi | spread_Y_hi | 
-    //              |     | sum_1_even  | spread_sum_1_even |                 |             |             | 
-    //              |     | sum_1_odd   | spread_sum_1_odd  |                 |             |             | 
-    //              |     | or_lo       | spread_or_lo      | spread_Z_lo     |             |             | 
-    //              |     | or_hi       | spread_or_hi      | spread_Z_hi     |             |             | 
-    //              |     | R_0_even    |                   |                 |             |             | 
-    //              |     | R_0_odd     |                   |                 |             |             | 
-    //              |     | R_1_even    |                   |                 |             |             | 
-    //              |     | R_1_odd     |                   |                 |             |             | 
+    // s_f3f5 | a_0 |   a_1       |       a_2         |    a_3          |    a_4      |    a_5      |
+    //   1    |     | sum_0_even  | spread_sum_0_even | spread_neg_Y_lo | spread_X_lo | spread_Y_lo | 
+    //        |     | sum_0_odd   | spread_sum_0_odd  | spread_neg_Y_hi | spread_X_hi | spread_Y_hi | 
+    //        |     | sum_1_even  | spread_sum_1_even |                 |             |             | 
+    //        |     | sum_1_odd   | spread_sum_1_odd  |                 |             |             | 
+    //        |     | or_lo       | spread_or_lo      | spread_Z_lo     |             |             | 
+    //        |     | or_hi       | spread_or_hi      | spread_Z_hi     |             |             | 
+    //        |     | R_0_even    |                   |                 |             |             | 
+    //        |     | R_0_odd     |                   |                 |             |             | 
+    //        |     | R_1_even    |                   |                 |             |             | 
+    //        |     | R_1_odd     |                   |                 |             |             | 
     //
-    pub(super) fn assign_or_not_xor(
+    pub(super) fn assign_f3(
         &self,
         region: &mut Region<'_, pallas::Base>,
         row: usize,
@@ -280,7 +280,7 @@ impl CompressionConfig {
         let a_4 = self.advice[1];
         let a_5 = self.advice[2];
 
-        self.s_or_not_xor.enable(region, row)?;
+        self.s_f3f5.enable(region, row)?;
 
         // Assign and copy spread_x_lo, spread_x_hi
         spread_halves_x.0.copy_advice(|| "spread_x_lo", region, a_4, row)?;
@@ -374,6 +374,21 @@ impl CompressionConfig {
         )?;
 
         Ok(even)
+    }
+
+
+    // The f5 gate is the same as the f3 gate with arguments (C, D, B) instead of (B, C, D)
+    // f3(X, Y, Z) = (X | !Y) ^ Z  
+    // f5(X, Y, Z) = X ^ (Y | !Z) = f3(Y, Z, X)
+    pub(super) fn assign_f5(
+        &self,
+        region: &mut Region<'_, pallas::Base>,
+        row: usize,
+        spread_halves_x: RoundWordSpread,
+        spread_halves_y: RoundWordSpread,
+        spread_halves_z: RoundWordSpread,
+    ) -> Result<(AssignedBits<16>, AssignedBits<16>), Error> {
+        self.assign_f3(region, row, spread_halves_y, spread_halves_z, spread_halves_x)
     }
 
     // For shift = 5..9

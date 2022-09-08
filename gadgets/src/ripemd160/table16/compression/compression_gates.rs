@@ -134,8 +134,8 @@ impl<F: FieldExt> CompressionGate<F> {
     // f5(X, Y, Z) = X ^ (Y | !Z)
     // Output is in r0_even, r1_even
     #[allow(clippy::too_many_arguments)]
-    pub fn or_not_xor_gate(
-        s_or_not_xor: Expression<F>,
+    pub fn s_f3(
+        s_f3f5: Expression<F>,
         spread_r0_even: Expression<F>,
         spread_r0_odd: Expression<F>,
         spread_r1_even: Expression<F>,
@@ -197,17 +197,11 @@ impl<F: FieldExt> CompressionGate<F> {
         let sum = or + z;
 
         Constraints::with_selector(
-            s_or_not_xor,
+            s_f3f5,
             checks
-                .chain(
-                    Some(("sum_x_not_y", sum_lhs - sum_rhs))
-                )
-                .chain(
-                    Some(("or_x_not_y", or_lhs - or_rhs))
-                )
-                .chain(
-                    Some(("or_x_not_y_xor_z", sum - xor))
-                )
+                .chain(Some(("sum_x_not_y", sum_lhs - sum_rhs)))
+                .chain(Some(("or_x_not_y", or_lhs - or_rhs)))
+                .chain(Some(("or_x_not_y_xor_z", sum - xor)))
         )
     }
 
@@ -826,7 +820,7 @@ mod tests {
     use halo2::dev::MockProver;
     use rand::Rng;
 
-    use crate::ripemd160::ref_impl::helper_functions::{rol, f2, f4};
+    use crate::ripemd160::ref_impl::helper_functions::{rol, f2, f4, f3, f5, f1};
     use crate::ripemd160::table16::Table16Assignment;
     use crate::ripemd160::table16::spread_table::{SpreadTableConfig, SpreadTableChip};
     use crate::ripemd160::table16::compression::{CompressionConfig, RoundWordDense};
@@ -842,12 +836,11 @@ mod tests {
         pub c: u32,
         pub d: u32,
         pub k: u32,
-        pub xor: u32,
+        pub f1_bcd: u32,
         pub f2_bcd: u32,
+        pub f3_bcd: u32,
         pub f4_bcd: u32,
-        pub b_and_c: u32,
-        pub neg_b_and_d: u32,
-        pub b_or_neg_c_xor_d: u32,
+        pub f5_bcd: u32,
         pub rol_5_b: u32,
         pub rol_6_b: u32,
         pub rol_7_b: u32,
@@ -873,12 +866,11 @@ mod tests {
                 c: 0,
                 d: 0,
                 k: 0,
-                xor: 0,
+                f1_bcd: 0,
                 f2_bcd: 0,
+                f3_bcd: 0,
                 f4_bcd: 0,
-                b_and_c: 0,
-                neg_b_and_d: 0,
-                b_or_neg_c_xor_d: 0,
+                f5_bcd: 0,
                 rol_5_b: 0,
                 rol_6_b: 0,
                 rol_7_b: 0,
@@ -1004,7 +996,7 @@ mod tests {
 
 
                     // row = 10
-                    config.compression.assign_decompose_0(&mut region, row, xor_out_lo, xor_out_hi, Value::known(self.xor))?;
+                    config.compression.assign_decompose_0(&mut region, row, xor_out_lo, xor_out_hi, Value::known(self.f1_bcd))?;
                     row += 1;
 
                     // row = 11
@@ -1042,29 +1034,52 @@ mod tests {
                     row += 1;
 
                     // row = 29
-                    // Testing or_not_xor gate
-                    let (b_or_neg_c_xor_d_lo, b_or_neg_c_xor_d_hi) =
-                    config.compression.assign_or_not_xor(
+                    // Testing f3_gate
+                    let (f3_bcd_lo, f3_bcd_hi) =
+                    config.compression.assign_f3(
                         &mut region,
                         row,
-                        spread_halves_b.into(), 
-                        spread_halves_c.into(), 
-                        spread_halves_d.into(),
+                        spread_halves_b.clone().into(), 
+                        spread_halves_c.clone().into(), 
+                        spread_halves_d.clone().into(),
                     )?;
-                    row += 10; // or_not_xor requires ten rows
+                    row += 10; // f3 requires ten rows
 
 
                     // row = 39
                     config.compression.assign_decompose_0(
                         &mut region,
                         row,
-                        b_or_neg_c_xor_d_lo,
-                        b_or_neg_c_xor_d_hi,
-                        Value::known(self.b_or_neg_c_xor_d)
+                        f3_bcd_lo,
+                        f3_bcd_hi,
+                        Value::known(self.f3_bcd)
                     )?;
                     row += 1;
 
                     // row = 40
+                    // Testing f5_gate
+                    let (f5_bcd_lo, f5_bcd_hi) =
+                    config.compression.assign_f5(
+                        &mut region,
+                        row,
+                        spread_halves_b.clone().into(), 
+                        spread_halves_c.clone().into(), 
+                        spread_halves_d.clone().into(),
+                    )?;
+                    row += 10; // f5 requires ten rows
+
+
+                    // row = 50
+                    config.compression.assign_decompose_0(
+                        &mut region,
+                        row,
+                        f5_bcd_lo,
+                        f5_bcd_hi,
+                        Value::known(self.f5_bcd)
+                    )?;
+                    row += 1;
+
+                    // row = 51
                     // Testing rotate_left_5 gate
                     let b_round_word_dense =
                         RoundWordDense(spread_b_var_lo.clone().dense, spread_b_var_hi.clone().dense);
@@ -1077,11 +1092,11 @@ mod tests {
                     )?;
                     row += 2; // rotate_left_5 requires two rows
 
-                    // row = 42
+                    // row = 53
                     config.compression.assign_decompose_0(&mut region, row, rol_5_b_lo, rol_5_b_hi, Value::known(self.rol_5_b))?;
                     row += 1;
 
-                    // row = 43
+                    // row = 54
                     // Testing rotate_left_6 gate
                     let b_round_word_dense =
                         RoundWordDense(spread_b_var_lo.clone().dense, spread_b_var_hi.clone().dense);
@@ -1094,11 +1109,11 @@ mod tests {
                     )?;
                     row += 2; // rotate_left_6 requires two rows
 
-                    // row = 45
+                    // row = 56
                     config.compression.assign_decompose_0(&mut region, row, rol_6_b_lo, rol_6_b_hi, Value::known(self.rol_6_b))?;
                     row += 1;
 
-                    // row = 46
+                    // row = 57
                     // Testing rotate_left_7 gate
                     let b_round_word_dense =
                         RoundWordDense(spread_b_var_lo.clone().dense, spread_b_var_hi.clone().dense);
@@ -1111,11 +1126,11 @@ mod tests {
                     )?;
                     row += 2; // rotate_left_7 requires two rows
 
-                    // row = 48
+                    // row = 59
                     config.compression.assign_decompose_0(&mut region, row, rol_7_b_lo, rol_7_b_hi, Value::known(self.rol_7_b))?;
                     row += 1;
 
-                    // row = 49
+                    // row = 60
                     // Testing rotate_left_8 gate
                     let b_round_word_dense =
                         RoundWordDense(spread_b_var_lo.clone().dense, spread_b_var_hi.clone().dense);
@@ -1128,11 +1143,11 @@ mod tests {
                     )?;
                     row += 2; // rotate_left_8 requires two rows
 
-                    // row = 51
+                    // row = 62
                     config.compression.assign_decompose_0(&mut region, row, rol_8_b_lo, rol_8_b_hi, Value::known(self.rol_8_b))?;
                     row += 1;
 
-                    // row = 52
+                    // row = 63
                     // Testing rotate_left_9 gate
                     let b_round_word_dense =
                         RoundWordDense(spread_b_var_lo.clone().dense, spread_b_var_hi.clone().dense);
@@ -1145,11 +1160,11 @@ mod tests {
                     )?;
                     row += 2; // rotate_left_9 requires two rows
 
-                    // row = 54
+                    // row = 65
                     config.compression.assign_decompose_0(&mut region, row, rol_9_b_lo, rol_9_b_hi, Value::known(self.rol_9_b))?;
                     row += 1;
 
-                    // row = 55
+                    // row = 66
                     // Testing rotate_left_10 gate
                     let b_round_word_dense =
                         RoundWordDense(spread_b_var_lo.clone().dense, spread_b_var_hi.clone().dense);
@@ -1162,11 +1177,11 @@ mod tests {
                     )?;
                     row += 2; // rotate_left_10 requires two rows
 
-                    // row = 57
+                    // row = 68
                     config.compression.assign_decompose_0(&mut region, row, rol_10_b_lo, rol_10_b_hi, Value::known(self.rol_10_b))?;
                     row += 1;
 
-                    // row = 58
+                    // row = 69
                     // Testing rotate_left_11 gate
                     let b_round_word_dense =
                         RoundWordDense(spread_b_var_lo.clone().dense, spread_b_var_hi.clone().dense);
@@ -1179,11 +1194,11 @@ mod tests {
                     )?;
                     row += 2; // rotate_left_11 requires two rows
 
-                    // row = 60
+                    // row = 71
                     config.compression.assign_decompose_0(&mut region, row, rol_11_b_lo, rol_11_b_hi, Value::known(self.rol_11_b))?;
                     row += 1;
 
-                    // row = 61
+                    // row = 72
                     // Testing rotate_left_12 gate
                     let b_round_word_dense =
                         RoundWordDense(spread_b_var_lo.clone().dense, spread_b_var_hi.clone().dense);
@@ -1196,11 +1211,11 @@ mod tests {
                     )?;
                     row += 2; // rotate_left_12 requires two rows
 
-                    // row = 63
+                    // row = 74
                     config.compression.assign_decompose_0(&mut region, row, rol_12_b_lo, rol_12_b_hi, Value::known(self.rol_12_b))?;
                     row += 1;
 
-                    // row = 64
+                    // row = 75
                     // Testing rotate_left_13 gate
                     let b_round_word_dense =
                         RoundWordDense(spread_b_var_lo.clone().dense, spread_b_var_hi.clone().dense);
@@ -1213,11 +1228,11 @@ mod tests {
                     )?;
                     row += 2; // rotate_left_13 requires two rows
 
-                    // row = 66
+                    // row = 77
                     config.compression.assign_decompose_0(&mut region, row, rol_13_b_lo, rol_13_b_hi, Value::known(self.rol_13_b))?;
                     row += 1;
 
-                    // row = 67
+                    // row = 78
                     // Testing rotate_left_14 gate
                     let b_round_word_dense =
                         RoundWordDense(spread_b_var_lo.clone().dense, spread_b_var_hi.clone().dense);
@@ -1230,11 +1245,11 @@ mod tests {
                     )?;
                     row += 2; // rotate_left_14 requires two rows
 
-                    // row = 69
+                    // row = 80
                     config.compression.assign_decompose_0(&mut region, row, rol_14_b_lo, rol_14_b_hi, Value::known(self.rol_14_b))?;
                     row += 1;
 
-                    // row = 70
+                    // row = 81
                     // Testing rotate_left_15 gate
                     let b_round_word_dense =
                         RoundWordDense(spread_b_var_lo.clone().dense, spread_b_var_hi.clone().dense);
@@ -1247,11 +1262,11 @@ mod tests {
                     )?;
                     row += 2; // rotate_left_15 requires two rows
 
-                    // row = 72
+                    // row = 83
                     config.compression.assign_decompose_0(&mut region, row, rol_15_b_lo, rol_15_b_hi, Value::known(self.rol_15_b))?;
                     row += 1;
                     
-                    // row = 73
+                    // row = 84
                     // Testing sum1_gate
                     let b_round_word_dense = RoundWordDense(spread_b_var_lo.clone().dense, spread_b_var_hi.clone().dense);
                     let c_round_word_dense = RoundWordDense(spread_c_var_lo.clone().dense, spread_c_var_hi.clone().dense);
@@ -1267,11 +1282,11 @@ mod tests {
                     )?;
                     row += 3; // sum_afxk_gate requires three rows
 
-                    // row = 76
+                    // row = 87
                     config.compression.assign_decompose_0(&mut region, row, sum_dense.0, sum_dense.1, Value::known(self.sum_bcdk))?;
                     row += 1;
                     
-                    // row = 77
+                    // row = 88
                     // Testing sum1_gate
                     let b_round_word_dense = RoundWordDense(spread_b_var_lo.clone().dense, spread_b_var_hi.clone().dense);
                     let c_round_word_dense = RoundWordDense(spread_c_var_lo.clone().dense, spread_c_var_hi.clone().dense);
@@ -1284,7 +1299,7 @@ mod tests {
                     )?;
                     row += 2; // sum_re_gate requires two rows
 
-                    // row = 79
+                    // row = 90
                     config.compression.assign_decompose_0(&mut region, row, sum_dense.0, sum_dense.1, Value::known(self.sum_bc))?;
 
                     Ok(())
@@ -1301,12 +1316,11 @@ mod tests {
         let c: u32 = rng.gen();
         let d: u32 = rng.gen();
         let k: u32 = rng.gen();
-        let xor: u32 = b ^ c ^ d;
+        let f1_bcd: u32 = f1(b, c, d);
         let f2_bcd: u32 = f2(b, c, d);
+        let f3_bcd: u32 = f3(b, c, d);
         let f4_bcd: u32 = f4(b, c, d);
-        let b_and_c: u32 = b & c;
-        let neg_b_and_d: u32 = !b & d;
-        let b_or_neg_c_xor_d: u32 = (b | !c) ^ d;
+        let f5_bcd: u32 = f5(b, c, d);
         let rol_5_b: u32 = rol(b, 5);
         let rol_6_b: u32 = rol(b, 6);
         let rol_7_b: u32 = rol(b, 7);
@@ -1328,12 +1342,11 @@ mod tests {
             c,
             d,
             k,
-            xor,
+            f1_bcd,
             f2_bcd,
+            f3_bcd,
             f4_bcd,
-            b_and_c,
-            neg_b_and_d,
-            b_or_neg_c_xor_d,
+            f5_bcd,
             rol_5_b,
             rol_6_b,
             rol_7_b,

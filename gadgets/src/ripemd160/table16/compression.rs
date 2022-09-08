@@ -220,61 +220,6 @@ impl CompressionConfig {
             )
         });
         
-        // s_ch on b, c words
-        meta.create_gate("s_ch", |meta| {
-            let s_ch = meta.query_selector(s_ch);
-            let spread_p0_even = meta.query_advice(a_2, Rotation(0));
-            let spread_p0_odd  = meta.query_advice(a_2, Rotation(1));
-            let spread_p1_even = meta.query_advice(a_2, Rotation(2));
-            let spread_p1_odd  = meta.query_advice(a_2, Rotation(3));
-            let spread_b_lo = meta.query_advice(a_3, Rotation::cur());
-            let spread_b_hi = meta.query_advice(a_3, Rotation::next());
-            let spread_c_lo = meta.query_advice(a_4, Rotation::cur());
-            let spread_c_hi = meta.query_advice(a_4, Rotation::next());
-            
-            CompressionGate::ch_gate(
-                s_ch,
-                spread_p0_even,
-                spread_p0_odd,
-                spread_p1_even,
-                spread_p1_odd,
-                spread_b_lo,
-                spread_b_hi,
-                spread_c_lo,
-                spread_c_hi,
-            )
-        });
-
-
-        // s_ch_neg on b, d words
-        meta.create_gate("s_ch_neg", |meta| {
-            let s_ch_neg = meta.query_selector(s_ch_neg);
-            let spread_q0_even = meta.query_advice(a_2, Rotation(0));
-            let spread_q0_odd  = meta.query_advice(a_2, Rotation(1));
-            let spread_q1_even = meta.query_advice(a_2, Rotation(2));
-            let spread_q1_odd  = meta.query_advice(a_2, Rotation(3));
-            let spread_b_lo = meta.query_advice(a_3, Rotation::cur());
-            let spread_b_hi = meta.query_advice(a_3, Rotation::next());
-            let spread_d_lo = meta.query_advice(a_4, Rotation::cur());
-            let spread_d_hi = meta.query_advice(a_4, Rotation::next());
-            let spread_b_neg_lo = meta.query_advice(a_5, Rotation::cur());
-            let spread_b_neg_hi = meta.query_advice(a_5, Rotation::next());
-            
-            CompressionGate::ch_neg_gate(
-                s_ch_neg,
-                spread_q0_even,
-                spread_q0_odd,
-                spread_q1_even,
-                spread_q1_odd,
-                spread_b_lo,
-                spread_b_hi,
-                spread_b_neg_lo,
-                spread_b_neg_hi,
-                spread_d_lo,
-                spread_d_hi,
-            )
-        });
-
         // s_or_not_xor on b, c, d words
         // (b | !c) ^ d
         meta.create_gate("s_or_not_xor", |meta| {

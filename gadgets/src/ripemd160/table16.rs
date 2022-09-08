@@ -227,17 +227,17 @@ trait Table16Assignment {
         let w_lo_bvec: Value<[bool; 16]> = w_lo_val.map(|x| i2lebsp(x.into()));
         let spread_w_lo = w_lo_bvec.map(SpreadWord::<16,32>::new);
         let spread_w_lo = SpreadVar::with_lookup(region, &lookup, row, spread_w_lo)?;
-        spread_w_lo.dense.copy_advice(|| format!("{}_lo", annotation), region, a_3, row)?;
+        spread_w_lo.dense.copy_advice(&annotation, region, a_3, row)?;
 
         let w_hi_val = word.map(|word| (word >> 16) as u16);
         let w_hi_bvec: Value<[bool; 16]> = w_hi_val.map(|x| i2lebsp(x.into()));
         let spread_w_hi = w_hi_bvec.map(SpreadWord::<16,32>::new);
         let spread_w_hi = SpreadVar::with_lookup(region, &lookup, row + 1, spread_w_hi)?;
-        spread_w_hi.dense.copy_advice(|| format!("{}_hi", annotation), region, a_4, row)?;
+        spread_w_hi.dense.copy_advice(&annotation, region, a_4, row)?;
 
         let w = AssignedBits::<32>::assign(
             region,
-            || format!("{}", annotation),
+            annotation,
             a_5,
             row,
             word,

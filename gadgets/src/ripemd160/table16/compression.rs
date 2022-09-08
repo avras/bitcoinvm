@@ -19,7 +19,7 @@ use std::ops::Range;
 mod compression_gates;
 mod compression_util;
 // mod subregion_digest;
-// mod subregion_initial;
+mod subregion_initial;
 // mod subregion_main;
 
 // use compression_gates::CompressionGate;
@@ -58,6 +58,71 @@ impl RoundWordSpread {
             .zip(self.1.value_u32())
             .map(|(lo, hi)| lo as u64 + (1 << 32) * hi as u64)
     }
+}
+
+
+#[derive(Clone, Debug)]
+pub struct RoundWord {
+    dense_halves: RoundWordDense,
+    spread_halves: RoundWordSpread,
+}
+
+impl RoundWord {
+    pub fn new(dense_halves: RoundWordDense, spread_halves: RoundWordSpread) -> Self {
+        RoundWord {
+            dense_halves,
+            spread_halves,
+        }
+    }
+}
+
+/// The internal state for RIPEMD160
+#[derive(Clone, Debug)]
+pub struct State {
+    a: Option<StateWord>,
+    b: Option<StateWord>,
+    c: Option<StateWord>,
+    d: Option<StateWord>,
+    e: Option<StateWord>,
+}
+
+impl State {
+    #[allow(clippy::many_single_char_names)]
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        a: StateWord,
+        b: StateWord,
+        c: StateWord,
+        d: StateWord,
+        e: StateWord,
+    ) -> Self {
+        State {
+            a: Some(a),
+            b: Some(b),
+            c: Some(c),
+            d: Some(d),
+            e: Some(e),
+        }
+    }
+
+    pub fn empty_state() -> Self {
+        State {
+            a: None,
+            b: None,
+            c: None,
+            d: None,
+            e: None,
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub enum StateWord {
+    A(RoundWordDense),
+    B(RoundWord),
+    C(RoundWord),
+    D(RoundWord),
+    E(RoundWordDense),
 }
 
 #[derive(Clone, Debug)]

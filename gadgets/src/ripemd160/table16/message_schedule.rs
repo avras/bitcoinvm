@@ -7,6 +7,7 @@ use std::convert::TryInto;
 use super::gates::Gate;
 use super::{AssignedBits, BlockWord, SpreadInputs, Table16Assignment, NUM_ADVICE_COLS};
 use super::{BLOCK_SIZE, ROUNDS};
+use halo2::circuit::Value;
 use halo2::{
     circuit::Layouter,
     plonk::{Advice, Column, ConstraintSystem, Error, Selector},
@@ -54,10 +55,8 @@ impl MessageScheduleConfig {
         meta: &mut ConstraintSystem<pallas::Base>,
         lookup: SpreadInputs,
         advice: [Column<Advice>; NUM_ADVICE_COLS],
+        s_decompose_0: Selector,
     ) -> Self {
-        // Create fixed columns for the selectors we will require.
-        let s_decompose_0 = meta.selector();
-
         // Rename these here for ease of matching the gates to the specification.
         let a_3 = advice[0];
         let a_4 = advice[1];
@@ -84,27 +83,27 @@ impl MessageScheduleConfig {
     pub(super) fn process(
         &self,
         layouter: &mut impl Layouter<pallas::Base>,
-        input: [BlockWord; BLOCK_SIZE],
+        input: [u32; BLOCK_SIZE],
     ) -> Result<
         (
-            [MessageWord; ROUNDS],
-            [(AssignedBits<16>, AssignedBits<16>); ROUNDS],
+            [MessageWord; BLOCK_SIZE],
+            [(AssignedBits<16>, AssignedBits<16>); BLOCK_SIZE],
         ),
         Error,
     > {
-        let mut w = Vec::<MessageWord>::with_capacity(ROUNDS);
-        let mut w_halves = Vec::<(AssignedBits<16>, AssignedBits<16>)>::with_capacity(ROUNDS);
+        let mut w = Vec::<MessageWord>::with_capacity(BLOCK_SIZE);
+        let mut w_halves = Vec::<(AssignedBits<16>, AssignedBits<16>)>::with_capacity(BLOCK_SIZE);
 
         layouter.assign_region(
             || "process message block",
             |mut region| {
-                w = Vec::<MessageWord>::with_capacity(ROUNDS);
-                w_halves = Vec::<(AssignedBits<16>, AssignedBits<16>)>::with_capacity(ROUNDS);
+                w = Vec::<MessageWord>::with_capacity(BLOCK_SIZE);
+                w_halves = Vec::<(AssignedBits<16>, AssignedBits<16>)>::with_capacity(BLOCK_SIZE);
 
                 // Assign X[0..16]
                 for (row, word) in input.iter().enumerate() {
                     self.s_decompose_0.enable(&mut region, row)?;
-                    let (word, halves) = self.assign_msgblk_word_and_halves(&mut region, word.0, row)?;
+                    let (word, halves) = self.assign_msgblk_word_and_halves(&mut region, Value::known(*word), row)?;
                     w.push(MessageWord(word));
                     w_halves.push(halves);
                 }

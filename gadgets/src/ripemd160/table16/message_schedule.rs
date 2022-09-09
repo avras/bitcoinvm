@@ -5,8 +5,8 @@ Based on code from https://github.com/privacy-scaling-explorations/halo2/blob/8c
 use std::convert::TryInto;
 
 use super::gates::Gate;
-use super::{AssignedBits, BlockWord, SpreadInputs, Table16Assignment, NUM_ADVICE_COLS};
-use super::{BLOCK_SIZE, ROUNDS};
+use super::{AssignedBits, SpreadInputs, Table16Assignment, NUM_ADVICE_COLS};
+use super::BLOCK_SIZE;
 use halo2::circuit::Value;
 use halo2::{
     circuit::Layouter,
@@ -15,12 +15,7 @@ use halo2::{
 };
 use halo2::halo2curves::pasta::pallas;
 
-mod schedule_gates;
 mod schedule_util;
-//mod subregion1;
-//mod subregion2;
-//mod subregion3;
-
 
 #[derive(Clone, Debug)]
 pub(super) struct MessageWord(AssignedBits<32>);

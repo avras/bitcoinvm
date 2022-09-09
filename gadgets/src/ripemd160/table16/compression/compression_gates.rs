@@ -1,8 +1,7 @@
 use super::super::{util::*, Gate};
 use halo2::{
     arithmetic::FieldExt,
-    circuit::Layouter,
-    plonk::{Constraint, Constraints, Expression, Error},
+    plonk::{Constraints, Expression},
 };
 use std::marker::PhantomData;
 

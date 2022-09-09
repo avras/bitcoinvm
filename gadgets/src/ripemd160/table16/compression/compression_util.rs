@@ -7,7 +7,7 @@ use super::{CompressionConfig, RoundWordSpread, RoundWordDense, RoundWord, State
 
 use halo2::{
     circuit::{Region, Value},
-    plonk::{Advice, Column, Error},
+    plonk::Error,
 };
 use halo2::halo2curves::pasta::pallas;
 use std::convert::TryInto;

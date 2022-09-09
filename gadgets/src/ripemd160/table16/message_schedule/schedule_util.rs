@@ -1,6 +1,4 @@
-use std::fmt::format;
-
-use crate::ripemd160::table16::{util::i2lebsp, spread_table::{SpreadWord, SpreadVar}, Table16Assignment};
+use crate::ripemd160::table16::Table16Assignment;
 
 use super::super::AssignedBits;
 use super::MessageScheduleConfig;

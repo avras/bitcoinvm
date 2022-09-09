@@ -3,20 +3,15 @@ use crate::ripemd160::ref_impl::constants::BLOCK_SIZE;
 use self::compression_gates::CompressionGate;
 
 use super::{
-    AssignedBits, BlockWord, SpreadInputs, SpreadVar, Table16Assignment, ROUNDS, DIGEST_SIZE, NUM_ADVICE_COLS,
+    AssignedBits, BlockWord, SpreadInputs, Table16Assignment, ROUNDS, DIGEST_SIZE, NUM_ADVICE_COLS,
 };
-use super::util::{i2lebsp, lebs2ip};
 use super::gates::Gate;
-use halo2::halo2curves::FieldExt;
-use halo2::plonk::{Expression, Constraints};
 use halo2::{
     circuit::{Layouter, Value},
     plonk::{Advice, Column, ConstraintSystem, Error, Selector},
     poly::Rotation,
 };
-use halo2::halo2curves::pasta::{pallas, Fp};
-use std::convert::TryInto;
-use std::ops::Range;
+use halo2::halo2curves::pasta::pallas;
 
 mod compression_gates;
 mod compression_util;

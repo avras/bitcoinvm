@@ -3,7 +3,7 @@ use crate::ripemd160::table16::AssignedBits;
 use crate::ripemd160::table16::spread_table::{SpreadInputs, SpreadVar, SpreadWord};
 use crate::ripemd160::table16::util::{i2lebsp, even_bits, odd_bits, lebs2ip, negate_spread, sum_with_carry};
 
-use super::{CompressionConfig, RoundWordSpread, RoundWordDense};
+use super::{CompressionConfig, RoundWordSpread, RoundWordDense, RoundWord, StateWord, State};
 
 use halo2::{
     circuit::{Region, Value},
@@ -776,4 +776,38 @@ impl CompressionConfig {
         Ok(())
     }
 
+}
+
+#[allow(clippy::many_single_char_names)]
+pub fn match_state(
+    state: State,
+) -> (
+    RoundWordDense,
+    RoundWord,
+    RoundWord,
+    RoundWord,
+    RoundWordDense,
+) {
+    let a = match state.a {
+        Some(StateWord::A(a)) => a,
+        _ => unreachable!(),
+    };
+    let b = match state.b {
+        Some(StateWord::B(b)) => b,
+        _ => unreachable!(),
+    };
+    let c = match state.c {
+        Some(StateWord::C(c)) => c,
+        _ => unreachable!(),
+    };
+    let d = match state.d {
+        Some(StateWord::D(d)) => d,
+        _ => unreachable!(),
+    };
+    let e = match state.e {
+        Some(StateWord::E(e)) => e,
+        _ => unreachable!(),
+    };
+
+    (a, b, c, d, e)
 }

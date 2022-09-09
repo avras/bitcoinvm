@@ -20,7 +20,7 @@ impl CompressionConfig {
         let a_5 = self.advice[2];
 
         let mut row: usize = 0;
-        self.s_decompose_0.enable(region, row)?;
+        self.s_decompose_word.enable(region, row)?;
         let (_, (a_lo, a_hi)) = self.assign_word_and_halves(
             || "assign iv[0]",
             region,
@@ -34,7 +34,7 @@ impl CompressionConfig {
         let a = RoundWordDense(a_lo.dense, a_hi.dense);
 
         row += 2;
-        self.s_decompose_0.enable(region, row)?;
+        self.s_decompose_word.enable(region, row)?;
         let (_, (b_lo, b_hi)) = self.assign_word_and_halves(
             || "assign iv[1]",
             region,
@@ -51,7 +51,7 @@ impl CompressionConfig {
         };
 
         row += 2;
-        self.s_decompose_0.enable(region, row)?;
+        self.s_decompose_word.enable(region, row)?;
         let (_, (c_lo, c_hi)) = self.assign_word_and_halves(
             || "assign iv[2]",
             region,
@@ -68,7 +68,7 @@ impl CompressionConfig {
         };
 
         row += 2;
-        self.s_decompose_0.enable(region, row)?;
+        self.s_decompose_word.enable(region, row)?;
         let (_, (d_lo, d_hi)) = self.assign_word_and_halves(
             || "assign iv[3]",
             region,
@@ -85,7 +85,7 @@ impl CompressionConfig {
         };
 
         row += 2;
-        self.s_decompose_0.enable(region, row)?;
+        self.s_decompose_word.enable(region, row)?;
         let (_, (e_lo, e_hi)) = self.assign_word_and_halves(
             || "assign iv[4]",
             region,

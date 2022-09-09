@@ -99,14 +99,14 @@ impl<F: FieldExt> Gate<F> {
         ))
     }
 
-    /// s_decompose_0 for all words
-    pub fn s_decompose_0(
-        s_decompose_0: Expression<F>,
+    /// s_decompose_word for all words
+    pub fn s_decompose_word(
+        s_decompose_word: Expression<F>,
         lo: Expression<F>,
         hi: Expression<F>,
         word: Expression<F>,
     ) -> Option<(&'static str, Expression<F>)> {
         let check = lo + hi * F::from(1 << 16) - word;
-        Some(("s_decompose_0", s_decompose_0 * check))
+        Some(("s_decompose_word", s_decompose_word * check))
     }
 }

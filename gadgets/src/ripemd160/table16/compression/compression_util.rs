@@ -849,7 +849,7 @@ impl CompressionConfig {
         })
     }
 
-    pub(super) fn assign_decompose_0(
+    pub(super) fn assign_decompose_word(
         &self,
         region: &mut Region<'_, pallas::Base>,
         row: usize,
@@ -861,7 +861,7 @@ impl CompressionConfig {
         let a_4 = self.advice[1];
         let a_5 = self.advice[2];
 
-        self.s_decompose_0.enable(region, row)?;
+        self.s_decompose_word.enable(region, row)?;
 
         AssignedBits::<32>::assign(
             region,
@@ -877,7 +877,7 @@ impl CompressionConfig {
         Ok(())
     }
 
-    pub(super) fn assign_decompose_0_dense(
+    pub(super) fn assign_decompose_word_dense(
         &self,
         region: &mut Region<'_, pallas::Base>,
         row: usize,
@@ -887,7 +887,7 @@ impl CompressionConfig {
         let a_4 = self.advice[1];
         let a_5 = self.advice[2];
 
-        self.s_decompose_0.enable(region, row)?;
+        self.s_decompose_word.enable(region, row)?;
 
         AssignedBits::<32>::assign(
             region,

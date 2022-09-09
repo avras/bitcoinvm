@@ -276,14 +276,14 @@ impl Table16Chip {
             meta.enable_equality(*column);
         }
 
-        let s_decompose_0 = meta.selector();
+        let s_decompose_word = meta.selector();
 
         let compression =
             CompressionConfig::configure(
                 meta,
                 lookup_inputs.clone(),
                 advice,
-                s_decompose_0
+                s_decompose_word
             );
 
         let message_schedule =
@@ -291,7 +291,7 @@ impl Table16Chip {
                 meta,
                 lookup_inputs,
                 advice,
-                s_decompose_0
+                s_decompose_word
             );
 
         Table16Config {

@@ -16,15 +16,15 @@ impl CompressionConfig {
         let (a, b, c, d, e) = match_state(state);
 
         let mut row: usize = 0;
-        self.assign_decompose_0_dense(region, row, a.clone())?;
+        self.assign_decompose_word_dense(region, row, a.clone())?;
         row += 1;
-        self.assign_decompose_0_dense(region, row, b.clone().dense_halves)?;
+        self.assign_decompose_word_dense(region, row, b.clone().dense_halves)?;
         row += 1;
-        self.assign_decompose_0_dense(region, row, c.clone().dense_halves)?;
+        self.assign_decompose_word_dense(region, row, c.clone().dense_halves)?;
         row += 1;
-        self.assign_decompose_0_dense(region, row, d.clone().dense_halves)?;
+        self.assign_decompose_word_dense(region, row, d.clone().dense_halves)?;
         row += 1;
-        self.assign_decompose_0_dense(region, row, e.clone())?;
+        self.assign_decompose_word_dense(region, row, e.clone())?;
 
         Ok([
             BlockWord(a.value()),

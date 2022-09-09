@@ -39,7 +39,7 @@ pub(super) struct MessageScheduleConfig {
     advice: [Column<Advice>; NUM_ADVICE_COLS],
 
     /// Decomposition gate for X[0..16]
-    s_decompose_0: Selector,
+    s_decompose_word: Selector,
 }
 
 impl Table16Assignment for MessageScheduleConfig {}
@@ -55,27 +55,27 @@ impl MessageScheduleConfig {
         meta: &mut ConstraintSystem<pallas::Base>,
         lookup: SpreadInputs,
         advice: [Column<Advice>; NUM_ADVICE_COLS],
-        s_decompose_0: Selector,
+        s_decompose_word: Selector,
     ) -> Self {
         // Rename these here for ease of matching the gates to the specification.
         let a_3 = advice[0];
         let a_4 = advice[1];
         let a_5 = advice[2];
 
-        // s_decompose_0 for all words
-        meta.create_gate("s_decompose_0", |meta| {
-            let s_decompose_0 = meta.query_selector(s_decompose_0);
+        // s_decompose_word for all words
+        meta.create_gate("s_decompose_word", |meta| {
+            let s_decompose_word = meta.query_selector(s_decompose_word);
             let lo = meta.query_advice(a_3, Rotation::cur());
             let hi = meta.query_advice(a_4, Rotation::cur());
             let word = meta.query_advice(a_5, Rotation::cur());
 
-            Gate::s_decompose_0(s_decompose_0, lo, hi, word)
+            Gate::s_decompose_word(s_decompose_word, lo, hi, word)
         });
 
         MessageScheduleConfig {
             lookup,
             advice,
-            s_decompose_0,
+            s_decompose_word,
         }
     }
 

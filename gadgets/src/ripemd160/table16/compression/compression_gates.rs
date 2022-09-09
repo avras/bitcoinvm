@@ -934,7 +934,7 @@ mod tests {
                 meta.advice_column(),
                 meta.advice_column()
             ];
-            let s_decompose_0 = meta.selector();
+            let s_decompose_word = meta.selector();
 
             let lookup = SpreadTableChip::configure(meta, input_tag, input_dense, input_spread);
             let lookup_inputs = lookup.input.clone();
@@ -951,7 +951,7 @@ mod tests {
                 meta.enable_equality(*column);
             }
             
-            let compression = CompressionConfig::configure(meta, lookup_inputs, advice, s_decompose_0);
+            let compression = CompressionConfig::configure(meta, lookup_inputs, advice, s_decompose_word);
 
             Self::Config {
                 lookup,
@@ -1034,7 +1034,7 @@ mod tests {
 
 
                     // row = 10
-                    config.compression.assign_decompose_0(&mut region, row, xor_out_lo, xor_out_hi, Value::known(self.f1_bcd))?;
+                    config.compression.assign_decompose_word(&mut region, row, xor_out_lo, xor_out_hi, Value::known(self.f1_bcd))?;
                     row += 1;
 
                     // row = 11
@@ -1051,7 +1051,7 @@ mod tests {
 
 
                     // row = 19
-                    config.compression.assign_decompose_0(&mut region, row, f2_bcd_lo, f2_bcd_hi, Value::known(self.f2_bcd))?;
+                    config.compression.assign_decompose_word(&mut region, row, f2_bcd_lo, f2_bcd_hi, Value::known(self.f2_bcd))?;
                     row += 1;
 
                     // row = 20
@@ -1068,7 +1068,7 @@ mod tests {
 
 
                     // row = 28
-                    config.compression.assign_decompose_0(&mut region, row, f4_bcd_lo, f4_bcd_hi, Value::known(self.f4_bcd))?;
+                    config.compression.assign_decompose_word(&mut region, row, f4_bcd_lo, f4_bcd_hi, Value::known(self.f4_bcd))?;
                     row += 1;
 
                     // row = 29
@@ -1085,7 +1085,7 @@ mod tests {
 
 
                     // row = 39
-                    config.compression.assign_decompose_0(
+                    config.compression.assign_decompose_word(
                         &mut region,
                         row,
                         f3_bcd_lo,
@@ -1108,7 +1108,7 @@ mod tests {
 
 
                     // row = 50
-                    config.compression.assign_decompose_0(
+                    config.compression.assign_decompose_word(
                         &mut region,
                         row,
                         f5_bcd_lo,
@@ -1131,7 +1131,7 @@ mod tests {
                     row += 2; // rotate_left_5 requires two rows
 
                     // row = 53
-                    config.compression.assign_decompose_0(&mut region, row, rol_5_b.0, rol_5_b.1, Value::known(self.rol_5_b))?;
+                    config.compression.assign_decompose_word(&mut region, row, rol_5_b.0, rol_5_b.1, Value::known(self.rol_5_b))?;
                     row += 1;
 
                     // row = 54
@@ -1146,7 +1146,7 @@ mod tests {
                     row += 2; // rotate_left_6 requires two rows
 
                     // row = 56
-                    config.compression.assign_decompose_0(&mut region, row, rol_6_b.0, rol_6_b.1, Value::known(self.rol_6_b))?;
+                    config.compression.assign_decompose_word(&mut region, row, rol_6_b.0, rol_6_b.1, Value::known(self.rol_6_b))?;
                     row += 1;
 
                     // row = 57
@@ -1161,7 +1161,7 @@ mod tests {
                     row += 2; // rotate_left_7 requires two rows
 
                     // row = 59
-                    config.compression.assign_decompose_0(&mut region, row, rol_7_b.0, rol_7_b.1, Value::known(self.rol_7_b))?;
+                    config.compression.assign_decompose_word(&mut region, row, rol_7_b.0, rol_7_b.1, Value::known(self.rol_7_b))?;
                     row += 1;
 
                     // row = 60
@@ -1176,7 +1176,7 @@ mod tests {
                     row += 2; // rotate_left_8 requires two rows
 
                     // row = 62
-                    config.compression.assign_decompose_0(&mut region, row, rol_8_b.0, rol_8_b.1, Value::known(self.rol_8_b))?;
+                    config.compression.assign_decompose_word(&mut region, row, rol_8_b.0, rol_8_b.1, Value::known(self.rol_8_b))?;
                     row += 1;
 
                     // row = 63
@@ -1191,7 +1191,7 @@ mod tests {
                     row += 2; // rotate_left_9 requires two rows
 
                     // row = 65
-                    config.compression.assign_decompose_0(&mut region, row, rol_9_b.0, rol_9_b.1, Value::known(self.rol_9_b))?;
+                    config.compression.assign_decompose_word(&mut region, row, rol_9_b.0, rol_9_b.1, Value::known(self.rol_9_b))?;
                     row += 1;
 
                     // row = 66
@@ -1206,7 +1206,7 @@ mod tests {
                     row += 2; // rotate_left_10 requires two rows
 
                     // row = 68
-                    config.compression.assign_decompose_0(&mut region, row, rol_10_b.0, rol_10_b.1, Value::known(self.rol_10_b))?;
+                    config.compression.assign_decompose_word(&mut region, row, rol_10_b.0, rol_10_b.1, Value::known(self.rol_10_b))?;
                     row += 1;
 
                     // row = 69
@@ -1221,7 +1221,7 @@ mod tests {
                     row += 2; // rotate_left_11 requires two rows
 
                     // row = 71
-                    config.compression.assign_decompose_0(&mut region, row, rol_11_b.0, rol_11_b.1, Value::known(self.rol_11_b))?;
+                    config.compression.assign_decompose_word(&mut region, row, rol_11_b.0, rol_11_b.1, Value::known(self.rol_11_b))?;
                     row += 1;
 
                     // row = 72
@@ -1236,7 +1236,7 @@ mod tests {
                     row += 2; // rotate_left_12 requires two rows
 
                     // row = 74
-                    config.compression.assign_decompose_0(&mut region, row, rol_12_b.0, rol_12_b.1, Value::known(self.rol_12_b))?;
+                    config.compression.assign_decompose_word(&mut region, row, rol_12_b.0, rol_12_b.1, Value::known(self.rol_12_b))?;
                     row += 1;
 
                     // row = 75
@@ -1251,7 +1251,7 @@ mod tests {
                     row += 2; // rotate_left_13 requires two rows
 
                     // row = 77
-                    config.compression.assign_decompose_0(&mut region, row, rol_13_b.0, rol_13_b.1, Value::known(self.rol_13_b))?;
+                    config.compression.assign_decompose_word(&mut region, row, rol_13_b.0, rol_13_b.1, Value::known(self.rol_13_b))?;
                     row += 1;
 
                     // row = 78
@@ -1266,7 +1266,7 @@ mod tests {
                     row += 2; // rotate_left_14 requires two rows
 
                     // row = 80
-                    config.compression.assign_decompose_0(&mut region, row, rol_14_b.0, rol_14_b.1, Value::known(self.rol_14_b))?;
+                    config.compression.assign_decompose_word(&mut region, row, rol_14_b.0, rol_14_b.1, Value::known(self.rol_14_b))?;
                     row += 1;
 
                     // row = 81
@@ -1281,7 +1281,7 @@ mod tests {
                     row += 2; // rotate_left_15 requires two rows
 
                     // row = 83
-                    config.compression.assign_decompose_0(&mut region, row, rol_15_b.0, rol_15_b.1, Value::known(self.rol_15_b))?;
+                    config.compression.assign_decompose_word(&mut region, row, rol_15_b.0, rol_15_b.1, Value::known(self.rol_15_b))?;
                     row += 1;
                     
                     // row = 84
@@ -1300,7 +1300,7 @@ mod tests {
                     row += 3; // sum_afxk_gate requires three rows
 
                     // row = 87
-                    config.compression.assign_decompose_0(&mut region, row, sum_dense.0, sum_dense.1, Value::known(self.sum_bcdk))?;
+                    config.compression.assign_decompose_word(&mut region, row, sum_dense.0, sum_dense.1, Value::known(self.sum_bcdk))?;
                     row += 1;
                     
                     // row = 88
@@ -1315,7 +1315,7 @@ mod tests {
                     row += 2; // sum_re_gate requires two rows
 
                     // row = 90
-                    config.compression.assign_decompose_0(&mut region, row, sum.dense_halves.0, sum.dense_halves.1, Value::known(self.sum_bc))?;
+                    config.compression.assign_decompose_word(&mut region, row, sum.dense_halves.0, sum.dense_halves.1, Value::known(self.sum_bc))?;
                     row += 1;
                     
                     // row = 91
@@ -1331,7 +1331,7 @@ mod tests {
                     row += 3; // sum_combine_ilr_gate requires three rows
 
                     // row = 94
-                    config.compression.assign_decompose_0(&mut region, row, sum.dense_halves.0, sum.dense_halves.1, Value::known(self.sum_bcd))?;
+                    config.compression.assign_decompose_word(&mut region, row, sum.dense_halves.0, sum.dense_halves.1, Value::known(self.sum_bcd))?;
 
                     Ok(())
                 }

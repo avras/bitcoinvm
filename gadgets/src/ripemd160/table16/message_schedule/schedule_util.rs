@@ -15,12 +15,12 @@ use super::super::message_schedule::BLOCK_SIZE;
 
 
 // Rows needed for each decompose gate
-pub const DECOMPOSE_0_ROWS: usize = 2;
+pub const DECOMPOSE_WORD_ROWS: usize = 2;
 
 /// Returns row number of a word
 pub fn get_word_row(word_idx: usize) -> usize {
     assert!(word_idx <= BLOCK_SIZE);
-    word_idx * DECOMPOSE_0_ROWS
+    word_idx * DECOMPOSE_WORD_ROWS
 }
 
 impl MessageScheduleConfig {
@@ -37,7 +37,7 @@ impl MessageScheduleConfig {
         let a_5 = self.advice[2];
 
         let row = get_word_row(word_idx);
-        self.s_decompose_0.enable(region, row)?;
+        self.s_decompose_word.enable(region, row)?;
 
         let (word, (spread_var_lo, spread_var_hi)) =
         self.assign_word_and_halves(

@@ -137,7 +137,7 @@ pub(super) struct CompressionConfig {
     lookup: SpreadInputs,
     advice: [Column<Advice>; NUM_ADVICE_COLS],
 
-    s_decompose_0: Selector,
+    s_decompose_word: Selector,
     s_f1: Selector,
     s_f2f4: Selector,
     s_f3f5: Selector,
@@ -154,7 +154,7 @@ impl CompressionConfig {
         meta: &mut ConstraintSystem<pallas::Base>,
         lookup: SpreadInputs,
         advice: [Column<Advice>; NUM_ADVICE_COLS],
-        s_decompose_0: Selector, 
+        s_decompose_word: Selector, 
     ) -> Self {
         let s_f1 = meta.selector();
         let s_f2f4 = meta.selector();
@@ -184,14 +184,14 @@ impl CompressionConfig {
         let a_4 = advice[1];
         let a_5 = advice[2];
 
-        // s_decompose_0 for all words
-        meta.create_gate("s_decompose_0", |meta| {
-            let s_decompose_0 = meta.query_selector(s_decompose_0);
+        // s_decompose_word for all words
+        meta.create_gate("s_decompose_word", |meta| {
+            let s_decompose_word = meta.query_selector(s_decompose_word);
             let lo = meta.query_advice(a_3, Rotation::cur());
             let hi = meta.query_advice(a_4, Rotation::cur());
             let word = meta.query_advice(a_5, Rotation::cur());
 
-            Gate::s_decompose_0(s_decompose_0, lo, hi, word)
+            Gate::s_decompose_word(s_decompose_word, lo, hi, word)
         });
 
         // s_f1 on b, c, d words
@@ -700,7 +700,7 @@ impl CompressionConfig {
         CompressionConfig {
             lookup,
             advice,
-            s_decompose_0,
+            s_decompose_word,
             s_f1,
             s_f2f4,
             s_f3f5,
@@ -847,25 +847,25 @@ mod tests {
                     |mut region| {
 
                         let mut row: usize = 0;
-                        config.compression.s_decompose_0.enable(&mut region, row)?;
+                        config.compression.s_decompose_word.enable(&mut region, row)?;
                         AssignedBits::<16>::assign(&mut region, || "expected a_lo", a_3, row, a.0.value_u16())?;
                         AssignedBits::<16>::assign(&mut region, || "expected a_hi", a_4, row, a.1.value_u16())?;
                         AssignedBits::<32>::assign(&mut region, || "actual a", a_5, row, Value::known(output[row]))?;
 
                         row += 1;
-                        config.compression.s_decompose_0.enable(&mut region, row)?;
+                        config.compression.s_decompose_word.enable(&mut region, row)?;
                         AssignedBits::<16>::assign(&mut region, || "expected b_lo", a_3, row, b.dense_halves.0.value_u16())?;
                         AssignedBits::<16>::assign(&mut region, || "expected b_hi", a_4, row, b.dense_halves.1.value_u16())?;
                         AssignedBits::<32>::assign(&mut region, || "actual b", a_5, row, Value::known(output[row]))?;
 
                         row += 1;
-                        config.compression.s_decompose_0.enable(&mut region, row)?;
+                        config.compression.s_decompose_word.enable(&mut region, row)?;
                         AssignedBits::<16>::assign(&mut region, || "expected c_lo", a_3, row, c.dense_halves.0.value_u16())?;
                         AssignedBits::<16>::assign(&mut region, || "expected c_hi", a_4, row, c.dense_halves.1.value_u16())?;
                         AssignedBits::<32>::assign(&mut region, || "actual c", a_5, row, Value::known(output[row]))?;
 
                         row += 1;
-                        config.compression.s_decompose_0.enable(&mut region, row)?;
+                        config.compression.s_decompose_word.enable(&mut region, row)?;
                         AssignedBits::<16>::assign(&mut region, || "expected d_lo", a_3, row, d.dense_halves.0.value_u16())?;
                         AssignedBits::<16>::assign(&mut region, || "expected d_hi", a_4, row, d.dense_halves.1.value_u16())?;
                         AssignedBits::<32>::assign(&mut region, || "actual d", a_5, row, Value::known(output[row]))?;

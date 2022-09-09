@@ -1,3 +1,5 @@
+use crate::ripemd160::ref_impl::constants::BLOCK_SIZE;
+
 use self::compression_gates::CompressionGate;
 
 use super::{
@@ -18,9 +20,9 @@ use std::ops::Range;
 
 mod compression_gates;
 mod compression_util;
-// mod subregion_digest;
 mod subregion_initial;
-// mod subregion_main;
+mod subregion_main;
+mod subregion_digest;
 
 // use compression_gates::CompressionGate;
 
@@ -675,4 +677,192 @@ impl CompressionConfig {
         }
     }
     
+    /// Initialize compression with a constant Initialization Vector of 32-byte words.
+    /// Returns an initialized state.
+    pub(super) fn initialize_with_iv(
+        &self,
+        layouter: &mut impl Layouter<pallas::Base>,
+        init_state: [u32; DIGEST_SIZE],
+    ) -> Result<State, Error> {
+        let mut new_state = State::empty_state();
+        layouter.assign_region(
+            || "initialize_with_iv",
+            |mut region| {
+                new_state = self.initialize_iv(&mut region, init_state)?;
+                Ok(())
+            },
+        )?;
+        Ok(new_state)
+    }
+
+    /// Given an initialized state and a message schedule, perform 80 compression rounds.
+    pub(super) fn compress(
+        &self,
+        layouter: &mut impl Layouter<pallas::Base>,
+        initialized_state: State,
+        w_halves: [(AssignedBits<16>, AssignedBits<16>); BLOCK_SIZE],
+    ) -> Result<State, Error> {
+        let mut left_state = State::empty_state();
+        // let mut right_state = State::empty_state();
+        layouter.assign_region(
+            || "compress",
+            |mut region| {
+                left_state = initialized_state.clone();
+                // right_state = initialized_state.clone();
+                for idx in 0..1 {
+                    left_state = self.assign_left_round(&mut region, idx, left_state.clone(), w_halves.clone())?;
+                    // right_state = self.assign_right_round(&mut region, idx, right_state.clone(), w_halves)?;
+                }
+                Ok(())
+            },
+        )?;
+        Ok(left_state)
+    }
+
+
+    /// After the final round, convert the state into the final digest.
+    pub(super) fn digest(
+        &self,
+        layouter: &mut impl Layouter<pallas::Base>,
+        state: State,
+    ) -> Result<[BlockWord; DIGEST_SIZE], Error> {
+        let mut digest = [BlockWord(Value::known(0)); DIGEST_SIZE];
+        layouter.assign_region(
+            || "digest",
+            |mut region| {
+                digest = self.assign_digest(&mut region, state.clone())?;
+
+                Ok(())
+            },
+        )?;
+        Ok(digest)
+    }
+ 
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::ripemd160::ref_impl::constants::{
+        PADDED_TEST_INPUT_ABC,
+        BLOCK_SIZE_BYTES,
+        BLOCK_SIZE,
+        INITIAL_VALUES, DIGEST_SIZE,
+    };
+    use crate::ripemd160::ref_impl::ripemd160::{State as RefState, MessageBlock, left_step};
+    use crate::ripemd160::table16::AssignedBits;
+    use crate::ripemd160::table16::compression::compression_util::match_state;
+    use crate::ripemd160::table16::util::convert_byte_slice_to_u32_slice;
+    
+    use super::super::{
+        Table16Chip, Table16Config,
+    };
+    use halo2::circuit::Value;
+    use halo2::{
+        circuit::{Layouter, SimpleFloorPlanner},
+        dev::MockProver,
+        plonk::{Circuit, ConstraintSystem, Error},
+    };
+    use halo2::halo2curves::pasta::{pallas, Fp};
+
+    #[test]
+    fn test_compress() {
+        struct MyCircuit {}
+
+        impl Circuit<pallas::Base> for MyCircuit {
+            type Config = Table16Config;
+            type FloorPlanner = SimpleFloorPlanner;
+
+            fn without_witnesses(&self) -> Self {
+                MyCircuit {}
+            }
+
+            fn configure(meta: &mut ConstraintSystem<pallas::Base>) -> Self::Config {
+                Table16Chip::configure(meta)
+            }
+
+            fn synthesize(
+                &self,
+                config: Self::Config,
+                mut layouter: impl Layouter<pallas::Base>,
+            ) -> Result<(), Error> {
+                Table16Chip::load(config.clone(), &mut layouter)?;
+
+                // Test vector: "abc"
+                // let input: [BlockWord; BLOCK_SIZE] = msg_schedule_test_input();
+                let input_bytes: [u8; BLOCK_SIZE_BYTES] = PADDED_TEST_INPUT_ABC;
+                let input: [u32; BLOCK_SIZE] = 
+                    convert_byte_slice_to_u32_slice::<BLOCK_SIZE_BYTES, BLOCK_SIZE>(input_bytes);
+
+                let (_, w_halves) = config.message_schedule.process(&mut layouter, input)?;
+
+                let compression = config.compression.clone();
+                let initial_state = compression.initialize_with_iv(&mut layouter, INITIAL_VALUES)?;
+
+                let state = config.compression.compress(&mut layouter, initial_state, w_halves)?;
+                let (a, b, c, d, e) = match_state(state.clone());
+
+                let ref_state: RefState = INITIAL_VALUES.into();
+                let msg_block: MessageBlock = input_bytes.into();
+                let output: [u32; DIGEST_SIZE] = left_step(0, ref_state, msg_block).into();
+                println!("{:#08x}", output[0]);
+
+                let a_3 = config.compression.advice[0];
+                let a_4 = config.compression.advice[1];
+                let a_5 = config.compression.advice[2];
+                layouter.assign_region(
+                    || "check digest", 
+                    |mut region| {
+
+                        let mut row: usize = 0;
+                        config.compression.s_decompose_0.enable(&mut region, row)?;
+                        AssignedBits::<16>::assign(&mut region, || "expected a_lo", a_3, row, a.0.value_u16())?;
+                        AssignedBits::<16>::assign(&mut region, || "expected a_hi", a_4, row, a.1.value_u16())?;
+                        AssignedBits::<32>::assign(&mut region, || "actual a", a_5, row, Value::known(output[row]))?;
+
+                        row += 1;
+                        config.compression.s_decompose_0.enable(&mut region, row)?;
+                        AssignedBits::<16>::assign(&mut region, || "expected b_lo", a_3, row, b.dense_halves.0.value_u16())?;
+                        AssignedBits::<16>::assign(&mut region, || "expected b_hi", a_4, row, b.dense_halves.1.value_u16())?;
+                        AssignedBits::<32>::assign(&mut region, || "actual b", a_5, row, Value::known(output[row]))?;
+
+                        row += 1;
+                        config.compression.s_decompose_0.enable(&mut region, row)?;
+                        AssignedBits::<16>::assign(&mut region, || "expected c_lo", a_3, row, c.dense_halves.0.value_u16())?;
+                        AssignedBits::<16>::assign(&mut region, || "expected c_hi", a_4, row, c.dense_halves.1.value_u16())?;
+                        AssignedBits::<32>::assign(&mut region, || "actual c", a_5, row, Value::known(output[row]))?;
+
+                        row += 1;
+                        config.compression.s_decompose_0.enable(&mut region, row)?;
+                        AssignedBits::<16>::assign(&mut region, || "expected d_lo", a_3, row, d.dense_halves.0.value_u16())?;
+                        AssignedBits::<16>::assign(&mut region, || "expected d_hi", a_4, row, d.dense_halves.1.value_u16())?;
+                        AssignedBits::<32>::assign(&mut region, || "actual d", a_5, row, Value::known(output[row]))?;
+
+                        row += 1;
+                        AssignedBits::<16>::assign(&mut region, || "expected e_lo", a_3, row, e.0.value_u16())?;
+                        AssignedBits::<16>::assign(&mut region, || "expected e_hi", a_4, row, e.1.value_u16())?;
+                        AssignedBits::<32>::assign(&mut region, || "actual e", a_5, row, Value::known(output[row]))?;
+
+                        Ok(())
+                    }
+                )?;
+                let digest = config.compression.digest(&mut layouter, state)?;
+                for (idx, digest_word) in digest.iter().enumerate() {
+                    digest_word.0.assert_if_known(|v| {
+                        *v == output[idx]
+                    });
+                }
+
+
+                Ok(())
+            }
+        }
+
+        let circuit: MyCircuit = MyCircuit {};
+
+        let prover = match MockProver::<pallas::Base>::run(17, &circuit, vec![]) {
+            Ok(prover) => prover,
+            Err(e) => panic!("{:?}", e),
+        };
+        assert_eq!(prover.verify(), Ok(()));
+    }
 }

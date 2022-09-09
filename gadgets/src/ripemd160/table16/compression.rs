@@ -707,10 +707,11 @@ impl CompressionConfig {
         layouter.assign_region(
             || "compress",
             |mut region| {
+                let mut row: usize = 0;
                 left_state = initialized_state.clone();
                 // right_state = initialized_state.clone();
-                for idx in 0..1 {
-                    left_state = self.assign_left_round(&mut region, idx, left_state.clone(), w_halves.clone())?;
+                for idx in 0..ROUNDS {
+                    left_state = self.assign_left_round(&mut region, idx, left_state.clone(), w_halves.clone(), &mut row)?;
                     // right_state = self.assign_right_round(&mut region, idx, right_state.clone(), w_halves)?;
                 }
                 Ok(())
@@ -746,7 +747,7 @@ mod tests {
         PADDED_TEST_INPUT_ABC,
         BLOCK_SIZE_BYTES,
         BLOCK_SIZE,
-        INITIAL_VALUES, DIGEST_SIZE,
+        INITIAL_VALUES, DIGEST_SIZE, ROUNDS,
     };
     use crate::ripemd160::ref_impl::ripemd160::{State as RefState, MessageBlock, left_step};
     use crate::ripemd160::table16::AssignedBits;
@@ -801,10 +802,12 @@ mod tests {
                 let state = config.compression.compress(&mut layouter, initial_state, w_halves)?;
                 let (a, b, c, d, e) = match_state(state.clone());
 
-                let ref_state: RefState = INITIAL_VALUES.into();
+                let mut ref_state: RefState = INITIAL_VALUES.into();
                 let msg_block: MessageBlock = input_bytes.into();
-                let output: [u32; DIGEST_SIZE] = left_step(0, ref_state, msg_block).into();
-                println!("{:#08x}", output[0]);
+                for i in 0..ROUNDS {
+                    ref_state = left_step(i, ref_state, msg_block);
+                }
+                let output: [u32; DIGEST_SIZE] = ref_state.into();
 
                 let a_3 = config.compression.advice[0];
                 let a_4 = config.compression.advice[1];

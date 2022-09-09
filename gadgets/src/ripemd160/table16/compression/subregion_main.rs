@@ -158,4 +158,37 @@ impl CompressionConfig {
             StateWord::E(d.dense_halves),
         ))
     }
+
+    #[allow(clippy::many_single_char_names)]
+    pub fn assign_combine_ilr(
+        &self,
+        region: &mut Region<'_, pallas::Base>,
+        init_state: State,
+        left_state: State,
+        right_state: State,
+        row: &mut usize,
+    ) -> Result<State, Error> {
+        let (h0, h1, h2, h3, h4) = match_state(init_state);
+        let (a_left, b_left, c_left, d_left, e_left) = match_state(left_state);
+        let (a_right, b_right, c_right, d_right, e_right) = match_state(right_state);
+
+        let a = self.assign_sum_combine_ilr(region, *row, h1.dense_halves, c_left.dense_halves, d_right.dense_halves)?;
+        *row += 3;
+        let b = self.assign_sum_combine_ilr(region, *row, h2.dense_halves, d_left.dense_halves, e_right)?;
+        *row += 3;
+        let c = self.assign_sum_combine_ilr(region, *row, h3.dense_halves, e_left, a_right)?;
+        *row += 3;
+        let d = self.assign_sum_combine_ilr(region, *row, h4, a_left, b_right.dense_halves)?;
+        *row += 3;
+        let e = self.assign_sum_combine_ilr(region, *row, h0, b_left.dense_halves, c_right.dense_halves)?;
+        *row += 3;
+
+        Ok(State::new(
+            StateWord::A(a.dense_halves),
+            StateWord::B(b),
+            StateWord::C(c),
+            StateWord::D(d),
+            StateWord::E(e.dense_halves),
+        ))
+    }
 }

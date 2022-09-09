@@ -1,3 +1,5 @@
+use std::convert::TryInto;
+
 /*
 Code from https://github.com/privacy-scaling-explorations/halo2/blob/8c945507ceca5f4ed6e52da3672ea0308bcac812/halo2_gadgets/src/sha256/table16/util.rs
 */
@@ -117,4 +119,16 @@ pub fn sum_with_carry(words: Vec<(Value<u16>, Value<u16>)>) -> (Value<u32>, Valu
     let sum = sum.map(|sum| sum as u32);
 
     (sum, carry)
+}
+
+pub fn convert_byte_slice_to_u32_slice<const LEN_BYTES: usize, const LEN_U32: usize>(
+    b: [u8; LEN_BYTES]
+) -> [u32; LEN_U32] {
+    assert!(LEN_BYTES == 4*LEN_U32);
+    let mut v: Vec<u32> = vec![];
+    for i in 0..LEN_U32 {
+        v.push(u32::from_le_bytes([b[4*i], b[4*i+1], b[4*i+2], b[4*i+3]]));
+    }
+    let a = v.as_slice();
+    a.try_into().expect("Failed conversion")
 }

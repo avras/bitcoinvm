@@ -138,6 +138,14 @@ pub fn compress(
     s: State,
     msg_block: MessageBlock,
 ) -> [u8; DIGEST_SIZE_BYTES] {
+    get_compress_state(s, msg_block).into()
+}
+
+// This helper function exists to enable easier testing in the RIPEMD160 gadget
+pub fn get_compress_state(
+    s: State,
+    msg_block: MessageBlock,
+) -> State {
     let mut left_state = s;
     let mut right_state = s;
     for j in 0..ROUNDS {
@@ -145,7 +153,7 @@ pub fn compress(
         right_state = right_step(j, right_state.clone(), msg_block);
     }
     let chain_state = combine_left_right_states(s, left_state, right_state);
-    chain_state.into()
+    chain_state
 }
 
 pub fn compress_first_block(

@@ -27,7 +27,7 @@ impl From<[u32; DIGEST_SIZE]> for State {
 
 impl From<State> for [u32; DIGEST_SIZE] {
     fn from(s: State) -> Self {
-        [s.a.to_be(), s.b.to_be(), s.c.to_be(), s.d.to_be(), s.e.to_be()]
+        [s.a, s.b, s.c, s.d, s.e]
     }
 }
 

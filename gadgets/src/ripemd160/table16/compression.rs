@@ -783,9 +783,9 @@ mod tests {
         PADDED_TEST_INPUT_ABC,
         BLOCK_SIZE_BYTES,
         BLOCK_SIZE,
-        INITIAL_VALUES, DIGEST_SIZE, ROUNDS,
+        INITIAL_VALUES, DIGEST_SIZE,
     };
-    use crate::ripemd160::ref_impl::ripemd160::{State as RefState, MessageBlock, left_step, right_step, combine_left_right_states};
+    use crate::ripemd160::ref_impl::ripemd160::get_compress_state;
     use crate::ripemd160::table16::AssignedBits;
     use crate::ripemd160::table16::compression::compression_util::match_state;
     use crate::ripemd160::table16::util::convert_byte_slice_to_u32_slice;
@@ -799,7 +799,7 @@ mod tests {
         dev::MockProver,
         plonk::{Circuit, ConstraintSystem, Error},
     };
-    use halo2::halo2curves::pasta::{pallas, Fp};
+    use halo2::halo2curves::pasta::pallas;
 
     #[test]
     fn test_compression() {
@@ -827,8 +827,8 @@ mod tests {
                 // Test vector: "abc"
                 // let input: [BlockWord; BLOCK_SIZE] = msg_schedule_test_input();
                 let input_bytes: [u8; BLOCK_SIZE_BYTES] = PADDED_TEST_INPUT_ABC;
-                let input: [u32; BLOCK_SIZE] = 
-                    convert_byte_slice_to_u32_slice::<BLOCK_SIZE_BYTES, BLOCK_SIZE>(input_bytes);
+                let input: [u32; BLOCK_SIZE] = convert_byte_slice_to_u32_slice::<BLOCK_SIZE_BYTES, BLOCK_SIZE>(input_bytes);
+                let output: [u32; DIGEST_SIZE] = get_compress_state(INITIAL_VALUES.into(), input_bytes.into()).into();
 
                 let (_, w_halves) = config.message_schedule.process(&mut layouter, input)?;
 
@@ -838,15 +838,6 @@ mod tests {
                 let state = config.compression.compress(&mut layouter, initial_state, w_halves)?;
                 let (a, b, c, d, e) = match_state(state.clone());
 
-                let mut left_ref_state: RefState = INITIAL_VALUES.into();
-                let mut right_ref_state: RefState = INITIAL_VALUES.into();
-                let msg_block: MessageBlock = input_bytes.into();
-                for i in 0..ROUNDS {
-                    left_ref_state = left_step(i, left_ref_state, msg_block);
-                    right_ref_state = right_step(i, right_ref_state, msg_block);
-                }
-                let final_ref_state = combine_left_right_states(INITIAL_VALUES.into(), left_ref_state, right_ref_state);
-                let output: [u32; DIGEST_SIZE] = final_ref_state.into();
 
                 let a_3 = config.compression.advice[0];
                 let a_4 = config.compression.advice[1];

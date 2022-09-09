@@ -1125,7 +1125,7 @@ mod tests {
                     config.compression.assign_rotate_left(
                         &mut region,
                         row,
-                        b_round_word_dense,
+                        b_round_word_dense.clone(),
                         5
                     )?;
                     row += 2; // rotate_left_5 requires two rows
@@ -1136,13 +1136,11 @@ mod tests {
 
                     // row = 54
                     // Testing rotate_left_6 gate
-                    let b_round_word_dense =
-                        RoundWordDense(spread_b_var_lo.clone().dense, spread_b_var_hi.clone().dense);
                     let rol_6_b =
                     config.compression.assign_rotate_left(
                         &mut region,
                         row,
-                        b_round_word_dense,
+                        b_round_word_dense.clone(),
                         6
                     )?;
                     row += 2; // rotate_left_6 requires two rows
@@ -1153,13 +1151,11 @@ mod tests {
 
                     // row = 57
                     // Testing rotate_left_7 gate
-                    let b_round_word_dense =
-                        RoundWordDense(spread_b_var_lo.clone().dense, spread_b_var_hi.clone().dense);
                     let rol_7_b =
                     config.compression.assign_rotate_left(
                         &mut region,
                         row,
-                        b_round_word_dense,
+                        b_round_word_dense.clone(),
                         7
                     )?;
                     row += 2; // rotate_left_7 requires two rows
@@ -1170,13 +1166,11 @@ mod tests {
 
                     // row = 60
                     // Testing rotate_left_8 gate
-                    let b_round_word_dense =
-                        RoundWordDense(spread_b_var_lo.clone().dense, spread_b_var_hi.clone().dense);
                     let rol_8_b =
                     config.compression.assign_rotate_left(
                         &mut region,
                         row,
-                        b_round_word_dense,
+                        b_round_word_dense.clone(),
                         8
                     )?;
                     row += 2; // rotate_left_8 requires two rows
@@ -1187,13 +1181,11 @@ mod tests {
 
                     // row = 63
                     // Testing rotate_left_9 gate
-                    let b_round_word_dense =
-                        RoundWordDense(spread_b_var_lo.clone().dense, spread_b_var_hi.clone().dense);
                     let rol_9_b =
                     config.compression.assign_rotate_left(
                         &mut region,
                         row,
-                        b_round_word_dense,
+                        b_round_word_dense.clone(),
                         9
                     )?;
                     row += 2; // rotate_left_9 requires two rows
@@ -1204,13 +1196,11 @@ mod tests {
 
                     // row = 66
                     // Testing rotate_left_10 gate
-                    let b_round_word_dense =
-                        RoundWordDense(spread_b_var_lo.clone().dense, spread_b_var_hi.clone().dense);
                     let rol_10_b =
                     config.compression.assign_rotate_left(
                         &mut region,
                         row,
-                        b_round_word_dense,
+                        b_round_word_dense.clone(),
                         10
                     )?;
                     row += 2; // rotate_left_10 requires two rows
@@ -1221,13 +1211,11 @@ mod tests {
 
                     // row = 69
                     // Testing rotate_left_11 gate
-                    let b_round_word_dense =
-                        RoundWordDense(spread_b_var_lo.clone().dense, spread_b_var_hi.clone().dense);
                     let rol_11_b =
                     config.compression.assign_rotate_left(
                         &mut region,
                         row,
-                        b_round_word_dense,
+                        b_round_word_dense.clone(),
                         11
                     )?;
                     row += 2; // rotate_left_11 requires two rows
@@ -1238,13 +1226,11 @@ mod tests {
 
                     // row = 72
                     // Testing rotate_left_12 gate
-                    let b_round_word_dense =
-                        RoundWordDense(spread_b_var_lo.clone().dense, spread_b_var_hi.clone().dense);
                     let rol_12_b =
                     config.compression.assign_rotate_left(
                         &mut region,
                         row,
-                        b_round_word_dense,
+                        b_round_word_dense.clone(),
                         12
                     )?;
                     row += 2; // rotate_left_12 requires two rows
@@ -1255,13 +1241,11 @@ mod tests {
 
                     // row = 75
                     // Testing rotate_left_13 gate
-                    let b_round_word_dense =
-                        RoundWordDense(spread_b_var_lo.clone().dense, spread_b_var_hi.clone().dense);
                     let rol_13_b =
                     config.compression.assign_rotate_left(
                         &mut region,
                         row,
-                        b_round_word_dense,
+                        b_round_word_dense.clone(),
                         13
                     )?;
                     row += 2; // rotate_left_13 requires two rows
@@ -1272,13 +1256,11 @@ mod tests {
 
                     // row = 78
                     // Testing rotate_left_14 gate
-                    let b_round_word_dense =
-                        RoundWordDense(spread_b_var_lo.clone().dense, spread_b_var_hi.clone().dense);
                     let rol_14_b =
                     config.compression.assign_rotate_left(
                         &mut region,
                         row,
-                        b_round_word_dense,
+                        b_round_word_dense.clone(),
                         14
                     )?;
                     row += 2; // rotate_left_14 requires two rows
@@ -1289,13 +1271,11 @@ mod tests {
 
                     // row = 81
                     // Testing rotate_left_15 gate
-                    let b_round_word_dense =
-                        RoundWordDense(spread_b_var_lo.clone().dense, spread_b_var_hi.clone().dense);
                     let rol_15_b =
                     config.compression.assign_rotate_left(
                         &mut region,
                         row,
-                        b_round_word_dense,
+                        b_round_word_dense.clone(),
                         15
                     )?;
                     row += 2; // rotate_left_15 requires two rows
@@ -1306,16 +1286,15 @@ mod tests {
                     
                     // row = 84
                     // Testing sum_afxk_gate
-                    let b_round_word_dense = RoundWordDense(spread_b_var_lo.clone().dense, spread_b_var_hi.clone().dense);
                     let c_round_word_dense = RoundWordDense(spread_c_var_lo.clone().dense, spread_c_var_hi.clone().dense);
                     let d_round_word_dense = RoundWordDense(spread_d_var_lo.clone().dense, spread_d_var_hi.clone().dense);
                     let sum_dense =
                     config.compression.assign_sum_afxk(
                         &mut region,
                         row,
-                        b_round_word_dense,
-                        c_round_word_dense,
-                        d_round_word_dense,
+                        b_round_word_dense.clone(),
+                        c_round_word_dense.clone(),
+                        d_round_word_dense.clone(),
                         self.k,
                     )?;
                     row += 3; // sum_afxk_gate requires three rows
@@ -1326,14 +1305,12 @@ mod tests {
                     
                     // row = 88
                     // Testing sum_re_gate
-                    let b_round_word_dense = RoundWordDense(spread_b_var_lo.clone().dense, spread_b_var_hi.clone().dense);
-                    let c_round_word_dense = RoundWordDense(spread_c_var_lo.clone().dense, spread_c_var_hi.clone().dense);
                     let sum =
                     config.compression.assign_sum_re(
                         &mut region,
                         row,
-                        b_round_word_dense,
-                        c_round_word_dense,
+                        b_round_word_dense.clone(),
+                        c_round_word_dense.clone(),
                     )?;
                     row += 2; // sum_re_gate requires two rows
 
@@ -1343,16 +1320,13 @@ mod tests {
                     
                     // row = 91
                     // Testing sum_re_gate
-                    let b_round_word_dense = RoundWordDense(spread_b_var_lo.clone().dense, spread_b_var_hi.clone().dense);
-                    let c_round_word_dense = RoundWordDense(spread_c_var_lo.clone().dense, spread_c_var_hi.clone().dense);
-                    let d_round_word_dense = RoundWordDense(spread_d_var_lo.clone().dense, spread_d_var_hi.clone().dense);
                     let sum =
                     config.compression.assign_sum_combine_ilr(
                         &mut region,
                         row,
-                        b_round_word_dense,
-                        c_round_word_dense,
-                        d_round_word_dense,
+                        b_round_word_dense.clone(),
+                        c_round_word_dense.clone(),
+                        d_round_word_dense.clone(),
                     )?;
                     row += 3; // sum_combine_ilr_gate requires three rows
 

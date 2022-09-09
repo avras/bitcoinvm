@@ -19,6 +19,8 @@ mod util;
 
 use gates::*;
 use spread_table::*;
+use message_schedule::*;
+use compression::*;
 use util::*;
 use super::ref_impl::constants::*;
 
@@ -204,6 +206,109 @@ impl AssignedBits<32> {
 }
 
 pub const NUM_ADVICE_COLS: usize = 3;
+
+/// Configuration for a [`Table16Chip`].
+#[derive(Clone, Debug)]
+pub struct Table16Config {
+    lookup: SpreadTableConfig,
+    message_schedule: MessageScheduleConfig,
+    compression: CompressionConfig,
+}
+
+/// A chip that implements RIPEMD-160 with a maximum lookup table size of $2^16$.
+#[derive(Clone, Debug)]
+pub struct Table16Chip {
+    config: Table16Config,
+    _marker: PhantomData<pallas::Base>,
+}
+
+impl Chip<pallas::Base> for Table16Chip {
+    type Config = Table16Config;
+    type Loaded = ();
+
+    fn config(&self) -> &Self::Config {
+        &self.config
+    }
+
+    fn loaded(&self) -> &Self::Loaded {
+        &()
+    }
+}
+
+impl Table16Chip {
+    /// Reconstructs this chip from the given config.
+    pub fn construct(config: <Self as Chip<pallas::Base>>::Config) -> Self {
+        Self {
+            config,
+            _marker: PhantomData,
+        }
+    }
+
+    /// Configures a circuit to include this chip.
+    pub fn configure(
+        meta: &mut ConstraintSystem<pallas::Base>,
+    ) -> <Self as Chip<pallas::Base>>::Config {
+        // Columns required by this chip:
+        let advice: [Column<Advice>; NUM_ADVICE_COLS]= [
+            meta.advice_column(),
+            meta.advice_column(),
+            meta.advice_column(),
+        ];
+
+        // - Three advice columns to interact with the lookup table.
+        let input_tag = meta.advice_column();
+        let input_dense = meta.advice_column();
+        let input_spread = meta.advice_column();
+
+        let lookup = SpreadTableChip::configure(meta, input_tag, input_dense, input_spread);
+        let lookup_inputs = lookup.input.clone();
+
+        // Rename these here for ease of matching the gates to the specification.
+        let _a_0 = lookup_inputs.tag;
+        let a_1 = lookup_inputs.dense;
+        let a_2 = lookup_inputs.spread;
+        let a_3 = advice[0];
+        let a_4 = advice[1];
+        let a_5 = advice[2];
+
+        // Add all advice columns to permutation
+        for column in [a_1, a_2, a_3, a_4, a_5].iter() {
+            meta.enable_equality(*column);
+        }
+
+        let s_decompose_0 = meta.selector();
+
+        let compression =
+            CompressionConfig::configure(
+                meta,
+                lookup_inputs.clone(),
+                advice,
+                s_decompose_0
+            );
+
+        let message_schedule =
+            MessageScheduleConfig::configure(
+                meta,
+                lookup_inputs,
+                advice,
+                s_decompose_0
+            );
+
+        Table16Config {
+            lookup,
+            message_schedule,
+            compression,
+        }
+    }
+
+    /// Loads the lookup table required by this chip into the circuit.
+    pub fn load(
+        config: Table16Config,
+        layouter: &mut impl Layouter<pallas::Base>,
+    ) -> Result<(), Error> {
+        SpreadTableChip::load(config.lookup, layouter)
+    }
+}
 
 /// Common assignment patterns used by Table16 regions.
 trait Table16Assignment {

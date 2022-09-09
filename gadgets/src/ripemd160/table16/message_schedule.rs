@@ -102,7 +102,6 @@ impl MessageScheduleConfig {
 
                 // Assign X[0..16]
                 for (row, word) in input.iter().enumerate() {
-                    self.s_decompose_0.enable(&mut region, row)?;
                     let (word, halves) = self.assign_msgblk_word_and_halves(&mut region, Value::known(*word), row)?;
                     w.push(MessageWord(word));
                     w_halves.push(halves);

@@ -34,9 +34,10 @@ impl MessageScheduleConfig {
         // Rename these here for ease of matching the gates to the specification.
         let a_3 = self.advice[0];
         let a_4 = self.advice[1];
-        let a_5 = self.advice[1];
+        let a_5 = self.advice[2];
 
         let row = get_word_row(word_idx);
+        self.s_decompose_0.enable(region, row)?;
 
         let (word, (spread_var_lo, spread_var_hi)) =
         self.assign_word_and_halves(

@@ -126,6 +126,11 @@ pub enum StateWord {
     D(RoundWord),
     E(RoundWordDense),
 }
+#[derive(Clone, Debug, PartialEq)]
+pub enum RoundSide {
+    Left,
+    Right,
+}
 
 #[derive(Clone, Debug)]
 pub(super) struct CompressionConfig {
@@ -703,21 +708,21 @@ impl CompressionConfig {
         w_halves: [(AssignedBits<16>, AssignedBits<16>); BLOCK_SIZE],
     ) -> Result<State, Error> {
         let mut left_state = State::empty_state();
-        // let mut right_state = State::empty_state();
+        let mut right_state = State::empty_state();
         layouter.assign_region(
             || "compress",
             |mut region| {
                 let mut row: usize = 0;
                 left_state = initialized_state.clone();
-                // right_state = initialized_state.clone();
+                right_state = initialized_state.clone();
                 for idx in 0..ROUNDS {
-                    left_state = self.assign_left_round(&mut region, idx, left_state.clone(), w_halves.clone(), &mut row)?;
-                    // right_state = self.assign_right_round(&mut region, idx, right_state.clone(), w_halves)?;
+                    left_state = self.assign_round(&mut region, idx, left_state.clone(), w_halves.clone(), &mut row, RoundSide::Left)?;
+                    right_state = self.assign_round(&mut region, idx, right_state.clone(), w_halves.clone(), &mut row, RoundSide::Right)?;
                 }
                 Ok(())
             },
         )?;
-        Ok(left_state)
+        Ok(right_state)
     }
 
 
@@ -749,7 +754,7 @@ mod tests {
         BLOCK_SIZE,
         INITIAL_VALUES, DIGEST_SIZE, ROUNDS,
     };
-    use crate::ripemd160::ref_impl::ripemd160::{State as RefState, MessageBlock, left_step};
+    use crate::ripemd160::ref_impl::ripemd160::{State as RefState, MessageBlock, left_step, right_step};
     use crate::ripemd160::table16::AssignedBits;
     use crate::ripemd160::table16::compression::compression_util::match_state;
     use crate::ripemd160::table16::util::convert_byte_slice_to_u32_slice;
@@ -805,7 +810,7 @@ mod tests {
                 let mut ref_state: RefState = INITIAL_VALUES.into();
                 let msg_block: MessageBlock = input_bytes.into();
                 for i in 0..ROUNDS {
-                    ref_state = left_step(i, ref_state, msg_block);
+                    ref_state = right_step(i, ref_state, msg_block);
                 }
                 let output: [u32; DIGEST_SIZE] = ref_state.into();
 

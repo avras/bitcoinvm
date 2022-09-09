@@ -411,7 +411,7 @@ impl CompressionConfig {
         row: usize,
         word: RoundWordDense,
         shift: u8,
-    ) -> Result<(AssignedBits<16>, AssignedBits<16>), Error> {
+    ) -> Result<RoundWordDense, Error> {
         assert!(shift > 4 && shift < 16);
         let a_3 = self.advice[0];
         let a_4 = self.advice[1];
@@ -539,7 +539,7 @@ impl CompressionConfig {
             AssignedBits::<1>::assign_bits(region, || "b(1)", a_3, row, b)?;
         };
 
-        Ok((rol_word_lo, rol_word_hi))
+        Ok(RoundWordDense(rol_word_lo, rol_word_hi))
     }
 
     // s_sum1 | a_0 |   a_1  |       a_2     | a_3  | a_4  | a_5   |
@@ -616,7 +616,7 @@ impl CompressionConfig {
         row: usize,
         rol: RoundWordDense,
         e: RoundWordDense,
-    ) -> Result<RoundWordDense, Error> {
+    ) -> Result<RoundWord, Error> {
         let a_3 = self.advice[0];
         let a_4 = self.advice[1];
         let a_5 = self.advice[2];
@@ -646,9 +646,14 @@ impl CompressionConfig {
         let sum_lo: Value<[bool; 16]> = sum.map(|w| w[..16].try_into().unwrap());
         let sum_hi: Value<[bool; 16]> = sum.map(|w| w[16..].try_into().unwrap());
 
-        let (dense, _spread) = self.assign_spread_word(region, &self.lookup, row, sum_lo, sum_hi)?;
+        let (dense, spread) = self.assign_spread_word(region, &self.lookup, row, sum_lo, sum_hi)?;
 
-        Ok(dense.into())
+        Ok(
+            RoundWord {
+                dense_halves: dense.into(),
+                spread_halves: spread.into(),
+            }
+        )
     }
 
     //          | a_0 |   a_1    |       a_2       |
@@ -748,6 +753,44 @@ impl CompressionConfig {
         ))
     }
 
+    //          | a_0 | a_1      | a_2             |
+    // row      |     | word_lo  | spread_word_lo  | 
+    // row + 1  |     | word_hi  | spread_word_hi  | 
+    // 
+    #[allow(clippy::too_many_arguments)]
+    #[allow(clippy::type_complexity)]
+    pub(super) fn assign_spread_dense_word(
+        &self,
+        region: &mut Region<'_, pallas::Base>,
+        lookup: &SpreadInputs,
+        row: usize,
+        word: RoundWordDense,
+    ) -> Result<RoundWord, Error> 
+    {
+        // Lookup R_lo, R_hi
+        let word_bits = word.value().map(|a| i2lebsp::<32>(a.into()));
+
+        let word_lo: Value<[bool; 16]> = word_bits.map(|q| q[..16].try_into().unwrap());
+        let word_hi: Value<[bool; 16]> = word_bits.map(|q| q[16..].try_into().unwrap());
+        let r_lo_var = SpreadVar::with_lookup(
+            region,
+            lookup,
+            row,
+            word_lo.map(SpreadWord::<16, 32>::new),
+        )?;
+        let r_hi_var = SpreadVar::with_lookup(
+            region,
+            lookup,
+            row + 1,
+            word_hi.map(SpreadWord::<16, 32>::new),
+        )?;
+
+        Ok(RoundWord {
+            dense_halves: (r_lo_var.dense, r_hi_var.dense).into(),
+            spread_halves: (r_lo_var.spread, r_hi_var.spread).into(),
+        })
+    }
+
     pub(super) fn assign_decompose_0(
         &self,
         region: &mut Region<'_, pallas::Base>,
@@ -775,6 +818,33 @@ impl CompressionConfig {
 
         Ok(())
     }
+
+    pub(super) fn assign_decompose_0_dense(
+        &self,
+        region: &mut Region<'_, pallas::Base>,
+        row: usize,
+        word: RoundWordDense,
+    ) -> Result<(), Error> {
+        let a_3 = self.advice[0];
+        let a_4 = self.advice[1];
+        let a_5 = self.advice[2];
+
+        self.s_decompose_0.enable(region, row)?;
+
+        AssignedBits::<32>::assign(
+            region,
+            || "word(u32)",
+            a_5,
+            row,
+            word.value(),
+        )?;
+
+        word.0.copy_advice(|| "word_lo", region, a_3, row)?;
+        word.1.copy_advice(|| "word_hi", region, a_4, row)?;
+
+        Ok(())
+    }
+
 
 }
 

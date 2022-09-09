@@ -1083,7 +1083,7 @@ mod tests {
                     // Testing rotate_left_5 gate
                     let b_round_word_dense =
                         RoundWordDense(spread_b_var_lo.clone().dense, spread_b_var_hi.clone().dense);
-                    let (rol_5_b_lo, rol_5_b_hi) =
+                    let rol_5_b =
                     config.compression.assign_rotate_left(
                         &mut region,
                         row,
@@ -1093,14 +1093,14 @@ mod tests {
                     row += 2; // rotate_left_5 requires two rows
 
                     // row = 53
-                    config.compression.assign_decompose_0(&mut region, row, rol_5_b_lo, rol_5_b_hi, Value::known(self.rol_5_b))?;
+                    config.compression.assign_decompose_0(&mut region, row, rol_5_b.0, rol_5_b.1, Value::known(self.rol_5_b))?;
                     row += 1;
 
                     // row = 54
                     // Testing rotate_left_6 gate
                     let b_round_word_dense =
                         RoundWordDense(spread_b_var_lo.clone().dense, spread_b_var_hi.clone().dense);
-                    let (rol_6_b_lo, rol_6_b_hi) =
+                    let rol_6_b =
                     config.compression.assign_rotate_left(
                         &mut region,
                         row,
@@ -1110,14 +1110,14 @@ mod tests {
                     row += 2; // rotate_left_6 requires two rows
 
                     // row = 56
-                    config.compression.assign_decompose_0(&mut region, row, rol_6_b_lo, rol_6_b_hi, Value::known(self.rol_6_b))?;
+                    config.compression.assign_decompose_0(&mut region, row, rol_6_b.0, rol_6_b.1, Value::known(self.rol_6_b))?;
                     row += 1;
 
                     // row = 57
                     // Testing rotate_left_7 gate
                     let b_round_word_dense =
                         RoundWordDense(spread_b_var_lo.clone().dense, spread_b_var_hi.clone().dense);
-                    let (rol_7_b_lo, rol_7_b_hi) =
+                    let rol_7_b =
                     config.compression.assign_rotate_left(
                         &mut region,
                         row,
@@ -1127,14 +1127,14 @@ mod tests {
                     row += 2; // rotate_left_7 requires two rows
 
                     // row = 59
-                    config.compression.assign_decompose_0(&mut region, row, rol_7_b_lo, rol_7_b_hi, Value::known(self.rol_7_b))?;
+                    config.compression.assign_decompose_0(&mut region, row, rol_7_b.0, rol_7_b.1, Value::known(self.rol_7_b))?;
                     row += 1;
 
                     // row = 60
                     // Testing rotate_left_8 gate
                     let b_round_word_dense =
                         RoundWordDense(spread_b_var_lo.clone().dense, spread_b_var_hi.clone().dense);
-                    let (rol_8_b_lo, rol_8_b_hi) =
+                    let rol_8_b =
                     config.compression.assign_rotate_left(
                         &mut region,
                         row,
@@ -1144,14 +1144,14 @@ mod tests {
                     row += 2; // rotate_left_8 requires two rows
 
                     // row = 62
-                    config.compression.assign_decompose_0(&mut region, row, rol_8_b_lo, rol_8_b_hi, Value::known(self.rol_8_b))?;
+                    config.compression.assign_decompose_0(&mut region, row, rol_8_b.0, rol_8_b.1, Value::known(self.rol_8_b))?;
                     row += 1;
 
                     // row = 63
                     // Testing rotate_left_9 gate
                     let b_round_word_dense =
                         RoundWordDense(spread_b_var_lo.clone().dense, spread_b_var_hi.clone().dense);
-                    let (rol_9_b_lo, rol_9_b_hi) =
+                    let rol_9_b =
                     config.compression.assign_rotate_left(
                         &mut region,
                         row,
@@ -1161,14 +1161,14 @@ mod tests {
                     row += 2; // rotate_left_9 requires two rows
 
                     // row = 65
-                    config.compression.assign_decompose_0(&mut region, row, rol_9_b_lo, rol_9_b_hi, Value::known(self.rol_9_b))?;
+                    config.compression.assign_decompose_0(&mut region, row, rol_9_b.0, rol_9_b.1, Value::known(self.rol_9_b))?;
                     row += 1;
 
                     // row = 66
                     // Testing rotate_left_10 gate
                     let b_round_word_dense =
                         RoundWordDense(spread_b_var_lo.clone().dense, spread_b_var_hi.clone().dense);
-                    let (rol_10_b_lo, rol_10_b_hi) =
+                    let rol_10_b =
                     config.compression.assign_rotate_left(
                         &mut region,
                         row,
@@ -1178,14 +1178,14 @@ mod tests {
                     row += 2; // rotate_left_10 requires two rows
 
                     // row = 68
-                    config.compression.assign_decompose_0(&mut region, row, rol_10_b_lo, rol_10_b_hi, Value::known(self.rol_10_b))?;
+                    config.compression.assign_decompose_0(&mut region, row, rol_10_b.0, rol_10_b.1, Value::known(self.rol_10_b))?;
                     row += 1;
 
                     // row = 69
                     // Testing rotate_left_11 gate
                     let b_round_word_dense =
                         RoundWordDense(spread_b_var_lo.clone().dense, spread_b_var_hi.clone().dense);
-                    let (rol_11_b_lo, rol_11_b_hi) =
+                    let rol_11_b =
                     config.compression.assign_rotate_left(
                         &mut region,
                         row,
@@ -1195,14 +1195,14 @@ mod tests {
                     row += 2; // rotate_left_11 requires two rows
 
                     // row = 71
-                    config.compression.assign_decompose_0(&mut region, row, rol_11_b_lo, rol_11_b_hi, Value::known(self.rol_11_b))?;
+                    config.compression.assign_decompose_0(&mut region, row, rol_11_b.0, rol_11_b.1, Value::known(self.rol_11_b))?;
                     row += 1;
 
                     // row = 72
                     // Testing rotate_left_12 gate
                     let b_round_word_dense =
                         RoundWordDense(spread_b_var_lo.clone().dense, spread_b_var_hi.clone().dense);
-                    let (rol_12_b_lo, rol_12_b_hi) =
+                    let rol_12_b =
                     config.compression.assign_rotate_left(
                         &mut region,
                         row,
@@ -1212,14 +1212,14 @@ mod tests {
                     row += 2; // rotate_left_12 requires two rows
 
                     // row = 74
-                    config.compression.assign_decompose_0(&mut region, row, rol_12_b_lo, rol_12_b_hi, Value::known(self.rol_12_b))?;
+                    config.compression.assign_decompose_0(&mut region, row, rol_12_b.0, rol_12_b.1, Value::known(self.rol_12_b))?;
                     row += 1;
 
                     // row = 75
                     // Testing rotate_left_13 gate
                     let b_round_word_dense =
                         RoundWordDense(spread_b_var_lo.clone().dense, spread_b_var_hi.clone().dense);
-                    let (rol_13_b_lo, rol_13_b_hi) =
+                    let rol_13_b =
                     config.compression.assign_rotate_left(
                         &mut region,
                         row,
@@ -1229,14 +1229,14 @@ mod tests {
                     row += 2; // rotate_left_13 requires two rows
 
                     // row = 77
-                    config.compression.assign_decompose_0(&mut region, row, rol_13_b_lo, rol_13_b_hi, Value::known(self.rol_13_b))?;
+                    config.compression.assign_decompose_0(&mut region, row, rol_13_b.0, rol_13_b.1, Value::known(self.rol_13_b))?;
                     row += 1;
 
                     // row = 78
                     // Testing rotate_left_14 gate
                     let b_round_word_dense =
                         RoundWordDense(spread_b_var_lo.clone().dense, spread_b_var_hi.clone().dense);
-                    let (rol_14_b_lo, rol_14_b_hi) =
+                    let rol_14_b =
                     config.compression.assign_rotate_left(
                         &mut region,
                         row,
@@ -1246,14 +1246,14 @@ mod tests {
                     row += 2; // rotate_left_14 requires two rows
 
                     // row = 80
-                    config.compression.assign_decompose_0(&mut region, row, rol_14_b_lo, rol_14_b_hi, Value::known(self.rol_14_b))?;
+                    config.compression.assign_decompose_0(&mut region, row, rol_14_b.0, rol_14_b.1, Value::known(self.rol_14_b))?;
                     row += 1;
 
                     // row = 81
                     // Testing rotate_left_15 gate
                     let b_round_word_dense =
                         RoundWordDense(spread_b_var_lo.clone().dense, spread_b_var_hi.clone().dense);
-                    let (rol_15_b_lo, rol_15_b_hi) =
+                    let rol_15_b =
                     config.compression.assign_rotate_left(
                         &mut region,
                         row,
@@ -1263,7 +1263,7 @@ mod tests {
                     row += 2; // rotate_left_15 requires two rows
 
                     // row = 83
-                    config.compression.assign_decompose_0(&mut region, row, rol_15_b_lo, rol_15_b_hi, Value::known(self.rol_15_b))?;
+                    config.compression.assign_decompose_0(&mut region, row, rol_15_b.0, rol_15_b.1, Value::known(self.rol_15_b))?;
                     row += 1;
                     
                     // row = 84
@@ -1290,7 +1290,7 @@ mod tests {
                     // Testing sum1_gate
                     let b_round_word_dense = RoundWordDense(spread_b_var_lo.clone().dense, spread_b_var_hi.clone().dense);
                     let c_round_word_dense = RoundWordDense(spread_c_var_lo.clone().dense, spread_c_var_hi.clone().dense);
-                    let sum_dense =
+                    let sum =
                     config.compression.assign_sum_re(
                         &mut region,
                         row,
@@ -1300,7 +1300,7 @@ mod tests {
                     row += 2; // sum_re_gate requires two rows
 
                     // row = 90
-                    config.compression.assign_decompose_0(&mut region, row, sum_dense.0, sum_dense.1, Value::known(self.sum_bc))?;
+                    config.compression.assign_decompose_0(&mut region, row, sum.dense_halves.0, sum.dense_halves.1, Value::known(self.sum_bc))?;
 
                     Ok(())
                 }

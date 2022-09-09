@@ -606,9 +606,9 @@ impl CompressionConfig {
         Ok(dense.into())
     }
 
-    // s_sum1 | a_0 |   a_1  |       a_2     | a_3    | a_4  | a_5   |
-    //   1    |     | sum_lo | spread_sum_lo | rol_lo | e_lo | carry | 
-    //        |     | sum_hi | spread_sum_hi | rol_hi | e_hi |       |
+    // s_sum_re | a_0 |   a_1  |       a_2     | a_3    | a_4  | a_5   |
+    //   1      |     | sum_lo | spread_sum_lo | rol_lo | e_lo | carry | 
+    //          |     | sum_hi | spread_sum_hi | rol_hi | e_hi |       |
     //
     pub(super) fn assign_sum_re(
         &self,
@@ -622,11 +622,11 @@ impl CompressionConfig {
         let a_5 = self.advice[2];
 
 
-        // Assign and copy a_lo, a_hi
+        // Assign and copy rol_lo, rol_hi
         rol.0.copy_advice(|| "rol_lo", region, a_3, row)?;
         rol.1.copy_advice(|| "rol_hi", region, a_3, row + 1)?;
         
-        // Assign and copy f_lo, f_hi
+        // Assign and copy e_lo, e_hi
         e.0.copy_advice(|| "e_lo", region, a_4, row)?;
         e.1.copy_advice(|| "e_hi", region, a_4, row + 1)?;
 
@@ -655,6 +655,64 @@ impl CompressionConfig {
             }
         )
     }
+
+    // s_sum_combine_ilr | a_0 |   a_1  |       a_2     | a_3           | a_4           | a_5            |
+    //   1               |     | sum_lo | spread_sum_lo | init_state_lo | left_state_lo | right_state_lo | 
+    //                   |     | sum_hi | spread_sum_hi | init_state_hi | left_state_hi | right_state_lo |
+    //                   |     |        |               | carry         |               |                |
+    //
+    pub(super) fn assign_sum_combine_ilr(
+        &self,
+        region: &mut Region<'_, pallas::Base>,
+        row: usize,
+        init_state_word: RoundWordDense,
+        left_state_word: RoundWordDense,
+        right_state_word: RoundWordDense,
+    ) -> Result<RoundWord, Error> {
+        let a_3 = self.advice[0];
+        let a_4 = self.advice[1];
+        let a_5 = self.advice[2];
+
+
+        // Assign and copy init_state_word_lo, init_state_word_hi
+        init_state_word.0.copy_advice(|| "init_state_word_lo", region, a_3, row)?;
+        init_state_word.1.copy_advice(|| "init_state_word_hi", region, a_3, row + 1)?;
+        
+        // Assign and copy left_state_word_lo, left_state_word_hi
+        left_state_word.0.copy_advice(|| "left_state_word_lo", region, a_4, row)?;
+        left_state_word.1.copy_advice(|| "left_state_word_hi", region, a_4, row + 1)?;
+
+        // Assign and copy right_state_word_lo, right_state_word_hi
+        right_state_word.0.copy_advice(|| "right_state_word_lo", region, a_5, row)?;
+        right_state_word.1.copy_advice(|| "right_state_word_hi", region, a_5, row + 1)?;
+
+        let (sum, carry) = sum_with_carry(vec![
+            (init_state_word.0.value_u16(), init_state_word.1.value_u16()),
+            (left_state_word.0.value_u16(), left_state_word.1.value_u16()),
+            (right_state_word.0.value_u16(), right_state_word.1.value_u16()),
+        ]);
+
+        region.assign_advice(
+            || "sum_combine_ilr_carry",
+            a_3,
+            row+2,
+            || carry.map(|value| pallas::Base::from(value as u64)),
+        )?;
+
+        let sum: Value<[bool; 32]> = sum.map(|w| i2lebsp(w.into()));
+        let sum_lo: Value<[bool; 16]> = sum.map(|w| w[..16].try_into().unwrap());
+        let sum_hi: Value<[bool; 16]> = sum.map(|w| w[16..].try_into().unwrap());
+
+        let (dense, spread) = self.assign_spread_word(region, &self.lookup, row, sum_lo, sum_hi)?;
+
+        Ok(
+            RoundWord {
+                dense_halves: dense.into(),
+                spread_halves: spread.into(),
+            }
+        )
+    }
+
 
     //          | a_0 |   a_1    |       a_2       |
     // row      |     | R_0_even | spread_R_0_even | 

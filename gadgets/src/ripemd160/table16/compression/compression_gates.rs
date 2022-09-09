@@ -810,6 +810,42 @@ impl<F: FieldExt> CompressionGate<F> {
                 .chain(Some(("sum_re", sum_check)))
         )
     }
+
+    // Gate for combining the initial, left, and right states of RIPEMD160
+    // after the 80 rounds
+    #[allow(clippy::too_many_arguments)]
+    pub fn sum_combine_ilr(
+        s_sum_re: Expression<F>,
+        sum_lo: Expression<F>,
+        sum_hi: Expression<F>,
+        carry: Expression<F>,
+        init_state_lo: Expression<F>,
+        init_state_hi: Expression<F>,
+        left_state_lo: Expression<F>,
+        left_state_hi: Expression<F>,
+        right_state_lo: Expression<F>,
+        right_state_hi: Expression<F>,
+    ) -> Constraints<
+        F,
+        (&'static str, Expression<F>),
+        impl Iterator<Item = (&'static str, Expression<F>)>,
+    > {
+        let range_check_carry = Gate::range_check(carry.clone(), 0, 1);
+
+        let lo = init_state_lo + left_state_lo + right_state_lo;
+        let hi = init_state_hi + left_state_hi + right_state_hi;
+        let sum = lo + hi * F::from(1 << 16);
+        let mod_sum = sum_lo + sum_hi * F::from(1 << 16);
+
+        let sum_check = sum - (carry * F::from(1 << 32)) - mod_sum;
+
+        Constraints::with_selector(
+            s_sum_re,
+            std::iter::empty()
+                .chain(Some(("range_check_carry", range_check_carry)))
+                .chain(Some(("sum_re", sum_check)))
+        )
+    }
 }
 
 #[cfg(test)]
@@ -852,8 +888,9 @@ mod tests {
         pub rol_13_b: u32,
         pub rol_14_b: u32,
         pub rol_15_b: u32,
-        pub sum_bcdk: u32,
         pub sum_bc: u32,
+        pub sum_bcd: u32,
+        pub sum_bcdk: u32,
     }
 
     impl Circuit<Fp> for CompressionGateTester {
@@ -882,8 +919,9 @@ mod tests {
                 rol_13_b: 0,
                 rol_14_b: 0,
                 rol_15_b: 0,
-                sum_bcdk: 0,
                 sum_bc: 0,
+                sum_bcd: 0,
+                sum_bcdk: 0,
             }
         }
 
@@ -1267,7 +1305,7 @@ mod tests {
                     row += 1;
                     
                     // row = 84
-                    // Testing sum1_gate
+                    // Testing sum_afxk_gate
                     let b_round_word_dense = RoundWordDense(spread_b_var_lo.clone().dense, spread_b_var_hi.clone().dense);
                     let c_round_word_dense = RoundWordDense(spread_c_var_lo.clone().dense, spread_c_var_hi.clone().dense);
                     let d_round_word_dense = RoundWordDense(spread_d_var_lo.clone().dense, spread_d_var_hi.clone().dense);
@@ -1287,7 +1325,7 @@ mod tests {
                     row += 1;
                     
                     // row = 88
-                    // Testing sum1_gate
+                    // Testing sum_re_gate
                     let b_round_word_dense = RoundWordDense(spread_b_var_lo.clone().dense, spread_b_var_hi.clone().dense);
                     let c_round_word_dense = RoundWordDense(spread_c_var_lo.clone().dense, spread_c_var_hi.clone().dense);
                     let sum =
@@ -1301,6 +1339,25 @@ mod tests {
 
                     // row = 90
                     config.compression.assign_decompose_0(&mut region, row, sum.dense_halves.0, sum.dense_halves.1, Value::known(self.sum_bc))?;
+                    row += 1;
+                    
+                    // row = 91
+                    // Testing sum_re_gate
+                    let b_round_word_dense = RoundWordDense(spread_b_var_lo.clone().dense, spread_b_var_hi.clone().dense);
+                    let c_round_word_dense = RoundWordDense(spread_c_var_lo.clone().dense, spread_c_var_hi.clone().dense);
+                    let d_round_word_dense = RoundWordDense(spread_d_var_lo.clone().dense, spread_d_var_hi.clone().dense);
+                    let sum =
+                    config.compression.assign_sum_combine_ilr(
+                        &mut region,
+                        row,
+                        b_round_word_dense,
+                        c_round_word_dense,
+                        d_round_word_dense,
+                    )?;
+                    row += 3; // sum_combine_ilr_gate requires three rows
+
+                    // row = 94
+                    config.compression.assign_decompose_0(&mut region, row, sum.dense_halves.0, sum.dense_halves.1, Value::known(self.sum_bcd))?;
 
                     Ok(())
                 }
@@ -1332,10 +1389,9 @@ mod tests {
         let rol_13_b: u32 = rol(b, 13);
         let rol_14_b: u32 = rol(b, 14);
         let rol_15_b: u32 = rol(b, 15);
-        let sum_bcdk = b.overflowing_add(c).0
-            .overflowing_add(d).0
-            .overflowing_add(k).0;
         let sum_bc = b.overflowing_add(c).0;
+        let sum_bcd = sum_bc.overflowing_add(d).0;
+        let sum_bcdk = sum_bcd.overflowing_add(k).0;
 
         let circuit = CompressionGateTester {
             b,
@@ -1358,8 +1414,9 @@ mod tests {
             rol_13_b,
             rol_14_b,
             rol_15_b,
-            sum_bcdk,
             sum_bc,
+            sum_bcd,
+            sum_bcdk,
         };
 
         let prover = MockProver::run(17, &circuit, vec![]).unwrap();

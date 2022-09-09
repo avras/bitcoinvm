@@ -144,6 +144,7 @@ pub(super) struct CompressionConfig {
     s_rotate_left: [Selector; 11], // Rotate left with shifts from 5 to 15 (inclusive)
     s_sum_afxk: Selector,
     s_sum_re: Selector,
+    s_sum_combine_ilr: Selector,
 }
 
 impl Table16Assignment for CompressionConfig {}
@@ -173,6 +174,7 @@ impl CompressionConfig {
         ];
         let s_sum_afxk = meta.selector();
         let s_sum_re = meta.selector();
+        let s_sum_combine_ilr = meta.selector();
 
         // Rename these here for ease of matching the gates to the specification.
         let a_0 = lookup.tag;
@@ -668,6 +670,32 @@ impl CompressionConfig {
             )
         });
 
+        meta.create_gate("s_sum_combine_ilr", |meta| {
+            let s_sum_re = meta.query_selector(s_sum_combine_ilr);
+            let sum_lo = meta.query_advice(a_1, Rotation::cur());
+            let sum_hi = meta.query_advice(a_1, Rotation::next());
+            let init_state_lo = meta.query_advice(a_3, Rotation::cur());
+            let init_state_hi = meta.query_advice(a_3, Rotation::next());
+            let left_state_lo = meta.query_advice(a_4, Rotation::cur());
+            let left_state_hi = meta.query_advice(a_4, Rotation::next());
+            let right_state_lo = meta.query_advice(a_5, Rotation::cur());
+            let right_state_hi = meta.query_advice(a_5, Rotation::next());
+            let carry = meta.query_advice(a_3, Rotation(2));
+            
+            CompressionGate::sum_combine_ilr(
+                s_sum_re,
+                sum_lo,
+                sum_hi,
+                carry,
+                init_state_lo,
+                init_state_hi,
+                left_state_lo,
+                left_state_hi,
+                right_state_lo,
+                right_state_hi,
+            )
+        });
+
 
         CompressionConfig {
             lookup,
@@ -679,6 +707,7 @@ impl CompressionConfig {
             s_rotate_left,
             s_sum_afxk,
             s_sum_re,
+            s_sum_combine_ilr,
         }
     }
     

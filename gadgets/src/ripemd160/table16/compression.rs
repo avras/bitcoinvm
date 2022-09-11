@@ -309,7 +309,7 @@ impl CompressionConfig {
             let spread_d_lo = meta.query_advice(a_3, Rotation(4));
             let spread_d_hi = meta.query_advice(a_3, Rotation(5));
             
-            CompressionGate::s_f3(
+            CompressionGate::f3_gate(
                 s_f3f5,
                 spread_r0_even,
                 spread_r0_odd,

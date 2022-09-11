@@ -263,11 +263,12 @@ impl CompressionConfig {
     //        |     | sum_1_odd   | spread_sum_1_odd  |                 |             |             | 
     //        |     | or_lo       | spread_or_lo      | spread_Z_lo     |             |             | 
     //        |     | or_hi       | spread_or_hi      | spread_Z_hi     |             |             | 
-    //        |     | R_0_even    |                   |                 |             |             | 
-    //        |     | R_0_odd     |                   |                 |             |             | 
-    //        |     | R_1_even    |                   |                 |             |             | 
-    //        |     | R_1_odd     |                   |                 |             |             | 
+    //        |     | R_0_even    | spread_R_0_even   |                 |             |             | 
+    //        |     | R_0_odd     | spread_R_0_odd    |                 |             |             | 
+    //        |     | R_1_even    | spread_R_1_even   |                 |             |             | 
+    //        |     | R_1_odd     | spread_R_1_odd    |                 |             |             | 
     //
+    // Output is in R_0_even, R_1_even
     pub(super) fn assign_f3(
         &self,
         region: &mut Region<'_, pallas::Base>,

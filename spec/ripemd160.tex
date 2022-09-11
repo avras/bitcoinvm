@@ -1,9 +1,13 @@
 \documentclass[10pt]{article}
 \usepackage{hyperref}
 \usepackage{amsmath}
+\usepackage{amssymb}
 \usepackage{amsfonts}
 \usepackage{minted}
 \usepackage{tikz}
+%\usepackage{algorithmicx}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
 \usepackage[a4paper]{geometry}
 \usetikzlibrary{arrows,backgrounds,shapes,matrix,positioning,fit,calc}
 \usetikzlibrary{decorations.pathreplacing,angles,quotes}
@@ -12,7 +16,7 @@
 \usetikzlibrary{trees}
 
 
-\title{RIPEMD160 Gadget Implementation using the \texttt{halo2} API}
+\title{RIPEMD-160 Gadget Implementation using the \texttt{halo2} API}
 \author{Saravanan Vijayakumaran}
 
 \begin{document}
@@ -20,14 +24,679 @@
   
 \section{Motivation}%
 \label{sec:motivation}
-The HASH160 opcode in the Bitcoin protocol hashes a given byte sequence with the SHA256 hash function followed by the RIPEMD160 hash function. It is used to obtain 20-byte hashes of objects like public keys and Bitcoin scripts.
+The HASH160 opcode in the Bitcoin protocol hashes a given byte sequence with the SHA-256 hash function followed by the RIPEMD-160 hash function. It is used to obtain 20-byte hashes of objects like public keys and Bitcoin scripts.
 
 To prove the validity of Bitcoin response scripts for Pay-to-Public-Key (P2PK) and Pay-to-Script-Hash (P2SH) UTXOs using the \texttt{halo2} API, we need an implementation of a HASH160 gadget.
-A SHA256 gadget implementation already exists in the \href{https://github.com/zcash/halo2/tree/main/halo2_gadgets/src}{\texttt{zcash/halo2}} repository. In this document, we describe the design and implementation of a RIPEMD160 gadget. It is heavily inspired by SHA256 gadget implementation.
+A SHA-256 gadget implementation already exists in the \href{https://github.com/zcash/halo2/tree/main/halo2_gadgets/src}{\texttt{zcash/halo2}} repository. In this document, we describe the design and implementation of a RIPEMD-160 gadget. It is heavily inspired by SHA-256 gadget implementation.
 
-\section{RIPEMD160 Specification}%
+\section{RIPEMD-160 Specification}%
 \label{sec:ripemd160_specification}
-A specification of the RIPEMD160 hash function is available at \url{https://homes.esat.kuleuven.be/~bosselae/ripemd160.html}, along with a C implementation. We repeat it here for convenience and for fixing the notation use to describe the gadget implementation. 
+A specification of the RIPEMD-160 hash function is available at \url{https://homes.esat.kuleuven.be/~bosselae/ripemd160.html}, along with a C implementation. We repeat it here for convenience and for fixing the notation used to describe the gadget implementation. 
+
+The RIPEMD-160 hash function operates on 32-bit words. The RIPEMD-160 round function processes 16 message words (64 bytes) at a time. So the input is padded to have a length in bytes which is a multiple of 64. \textit{We assume that the input to the RIPEMD-160 gadget has already been padded correctly.}
+
+\paragraph{Padding Scheme} RIPEMD-160 uses the same padding scheme as MD4 \cite{MD4Digest}. Suppose that the input is a $b$-bit message where $b \ge 0$.
+\begin{itemize}
+  \item A single 1 bit is appended to the message followed by a sequence of 0 bits until the length of the padded message in bits is congruent to 448 modulo 512.
+  \item A 64-bit representation of the length $b$ is then appended to get a bit sequence whose length is a multiple of 512. The 4 lower order bytes of $b$ are appended first in little-endian (LE) order (least significant byte appears first), followed by the 4 higher order bytes of $b$ also in LE order. For example, the 64-bit representation of $b=24$ is \texttt{0x1A00 0000 0000 0000}.
+\end{itemize}
+
+\paragraph{Functions}
+The following functions are used in RIPEMD-160.
+\begin{align*}
+  f_1(x,y,z) & = x \oplus y \oplus z, \\
+  f_2(x,y,z) & = \left( x \wedge y \right) \vee \left( \lnot x \wedge z \right), \\
+  f_3(x,y,z) & = \left( x \vee \lnot y \right) \oplus z, \\
+  f_4(x,y,z) & = \left( x \wedge z \right) \vee \left(  y \wedge \lnot z \right), \\
+  f_3(x,y,z) & = x \oplus \left( y \vee \lnot z \right) .
+\end{align*}
+The variables $x, y, z$ are 32-bit words. The symbols $\oplus$, $\wedge$, $\vee$, and $\lnot$ respectively represent the bitwise XOR, AND, OR, and NEGATE operations.
+
+\paragraph{Phase Constants}
+The RIPEMD-160 round function has two independent halves whose outputs are combined at the end. Each half has 80 rounds which are divided into 5 phases of 16 rounds each. The following constants are used in each phase where $K_i$ is used in the $i$th round of the left half and $K_i'$ is used in the $i$th round of the right half.
+\begin{align*}
+  & K_1 = \texttt{0x00000000}, & K_1' = \texttt{0x50A28BE6},\\
+  & K_2 = \texttt{0x5A827999}, & K_2' = \texttt{0x5C4DD124},\\
+  & K_3 = \texttt{0x6ED9EBA1}, & K_3' = \texttt{0x6D703EF3},\\
+  & K_4 = \texttt{0x8F1BBCDC}, & K_4' = \texttt{0x7A6D76E9},\\
+  & K_5 = \texttt{0xA953FD4E}, & K_5' = \texttt{0x00000000}.
+\end{align*}
+The non-zero values above are derived from the square roots and cube roots of 2, 3, 5, and 7.
+
+\paragraph{Message Word Selection}
+The input to the round function is a 16-word message block. In each of the 80 rounds, one of the 16 message words is used. For a round index ranging from 0 to 79 and message index ranging from 0 to 15, the round index to message index mapping for the \textit{left} half is as follows. 
+\begin{align*}
+  r[0..80]  =
+    [&0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15,\\
+     &7,  4, 13,  1, 10,  6, 15,  3, 12,  0,  9,  5,  2, 14, 11,  8,\\
+     &3, 10, 14,  4,  9, 15,  8,  1,  2,  7,  0,  6, 13, 11,  5, 12,\\
+     &1,  9, 11, 10,  0,  8, 12,  4, 13,  3,  7, 15, 14,  5,  6,  2,\\
+     &4,  0,  5,  9,  7, 12,  2, 10, 14,  1,  3,  8, 11,  6, 15, 13]
+\end{align*}
+The round index to message index mapping for the \textit{right} half is as follows.
+\begin{align*}
+  r'[0..80]  =
+   [&5, 14,  7,  0,  9,  2, 11,  4, 13,  6, 15,  8,  1, 10,  3, 12,\\
+    &6, 11,  3,  7,  0, 13,  5, 10, 14, 15,  8, 12,  4,  9,  1,  2,\\
+    &15,  5,  1,  3,  7, 14,  6,  9, 11,  8, 12,  2, 10,  0,  4, 13,\\
+    &8,  6,  4,  1,  3, 11, 15,  0,  5, 12,  2, 13,  9,  7, 10, 14,\\
+    &12, 15, 10,  4,  1,  5,  8,  7,  6,  2, 13, 14,  0,  3,  9, 11]
+\end{align*}
+\paragraph{Rotate Left Amount}
+Each of the 80 rounds of both halves involves a rotate left operation on a 32-bit word. The amount of rotation ranges from 5 to 15.
+The round index to rotate amount mapping for the \textit{left} half is as follows.
+\begin{align*}
+  s[0..80]  =
+  [&11, 14, 15, 12,  5,  8,  7,  9, 11, 13, 14, 15,  6,  7,  9,  8,\\
+   &7,  6,  8, 13, 11,  9,  7, 15,  7, 12, 15,  9, 11,  7, 13, 12,\\
+   &11, 13,  6,  7, 14,  9, 13, 15, 14,  8, 13,  6,  5, 12,  7,  5,\\
+   &11, 12, 14, 15, 14, 15,  9,  8,  9, 14,  5,  6,  8,  6,  5, 12,\\
+   &9, 15,  5, 11,  6,  8, 13, 12,  5, 12, 13, 14, 11,  8,  5,  6]
+\end{align*}
+The round index to rotate amount mapping for the \textit{right} half is as follows.
+\begin{align*}
+  s'[0..80]  =
+  [&8,  9,  9, 11, 13, 15, 15,  5,  7,  7,  8, 11, 14, 14, 12,  6,\\
+   &9, 13, 15,  7, 12,  8,  9, 11,  7,  7, 12,  7,  6, 15, 13, 11,\\
+   &9,  7, 15, 11,  8,  6,  6, 14, 12, 13,  5, 14, 13, 13,  7,  5,\\
+   &15,  5,  8, 11, 14, 14,  6, 14,  6,  9, 12,  9, 12,  5, 15,  8,\\
+   &8,  5, 12,  9, 12,  5, 14,  6,  8, 13,  6,  5, 15, 13, 11, 11]
+\end{align*}
+\paragraph{Compression Function}
+Let $\boxplus$ denote addition modulo $2^{32}$ and $\texttt{rol}_{s}$ denote the rotate left operation by $s$ positions. RIPEMD-160 uses a 5-word chaining variable whose initial value is given as follows.
+\begin{align*}
+  h_0 = \texttt{0x67452301},\ \  h_1 = \texttt{0xEFCDAB89},\ \  h_2 = \texttt{0x98BADCFE},\ \  h_3 = \texttt{0x10325476},\ \  h_4 = \texttt{0xC3D2E1F0}. 
+\end{align*}
+Suppose that the input after padding consists of $t$ 16-word blocks. Let $X_i[j]$ denote the message word at index $j$ in the $i$th block, where $0 \le i \le  t-1$ and $0 \le j \le  15$. The following pseudocode describes the RIPEMD-160 compression function.
+
+\begin{algorithm}
+  \caption{RIPEMD-160 compression function}
+  \begin{algorithmic}
+  \For{$i = 0$ to $t-1$}
+    \State $A \gets h_0$; $B \gets h_1$; $C \gets h_2$; $D \gets h_{3};$ $E \gets h_4$
+    \State $A' \gets h_0$; $B' \gets h_1$; $C' \gets h_2$; $D' \gets h_3$; $E' \gets h_4$
+    \For{$j = 0$ to $79$}
+    \State $p = \left\lfloor \frac{j}{16}  \right\rfloor + 1$ \Comment{Calculate phase index}
+    \State $T \gets \texttt{rol}_{s[j]} \left( A \boxplus f_p(B, C, D) \boxplus X_i[r[j]] \boxplus K[j]\right) \boxplus E$
+    \State $A \gets E$; $E \gets D$; $D \gets \texttt{rol}_{10}(C)$; $C \gets B$; $B \gets T$
+    \State $p' = 6-p$
+    \State $T \gets \texttt{rol}_{s'[j]} \left( A' \boxplus f_{p'}(B', C', D') \boxplus X_i[r'[j]] \boxplus K'[j]\right) \boxplus E'$
+    \State $A' \gets E'$; $E' \gets D'$; $D' \gets \texttt{rol}_{10}(C')$; $C' \gets B'$; $B' \gets T$
+    \EndFor
+    \State $T \gets h_1 \boxplus C \boxplus D'$; $h_1 \gets h_2 \boxplus D \boxplus E'$; $h_2 = h_3 \boxplus E \boxplus A'$;
+    \State $h_3 \gets h_4 \boxplus A \boxplus B'$; $h_4 \gets h_0 \boxplus B \boxplus C'$; $h_0 \gets T$.
+  \EndFor
+  \end{algorithmic}
+\end{algorithm}
+
+The variables $A,B,C,D,E$ represent the state of the left half of the compression function and the variables $A',B',C',D',E'$ represent those of the right half. The final hash value is present in the 5 words $h_0, h_1, h_2, h_3, h_4$. To convert these words into the hash byte sequence, we write each word in the sequence $h_0,h_1,\ldots,h_4$ as 4 bytes in LE order.
+
+\section{Gates}%
+\label{sec:gates}
+We need to implement gates for the following operations.
+\begin{itemize}
+  \item The functions $f_1, f_2, \ldots, f_5$.
+  \item Rotate left operation $\texttt{rol}_s$ for shift amount $s \in \{5,6,\ldots,15\}$.
+  \item Addition of four words modulo $2^{32}$ to calculate $S = A \boxplus f_p(B, C, D) \boxplus X_i[r[j]] \boxplus K[j]$
+  \item Addition of two words modulo $2^{32}$ to calculate $\texttt{rol}_s(S) \boxplus E$
+  \item Addition of three words modulo $2^{32}$ to calculate expressions of the form $h_1 \boxplus C \boxplus D'$
+\end{itemize}
+All our gate implementations use ideas from the SHA-256 Table16 gate implementations\footnote{\url{https://zcash.github.io/halo2/design/gadgets/sha256/table16.html}}. We use six columns $a_0, a_1, \ldots, a_5$, out of which the first three correspond to the 16-bit lookup table and the last three are general advice columns.
+
+\begin{center}
+  \begin{tabular}{c|c|c}
+    $a_0$ & $a_1$ & $a_2$ \\ \hline
+    tag($R$) & $R$ & spread($R$)
+  \end{tabular}
+\end{center}
+In each row, the lookup table checks that the values in $a_0, a_1, a_2$ satisfy the following constraints.
+\begin{itemize}
+  \item The value in $a_1$ is a 16-bit value $R$.
+  \item The value spread($R$) in $a_2$ is a 32-bit value that equals the spread version of $R$, i.e.~it is obtained by inserting 0 bits in the odd positions of $R$.
+  \item The value tag($R$) in $a_0$ depends on $R$ as follows:
+    \begin{align*}
+      \text{tag}(R) = \begin{cases}
+                  0 & \text{ if } 0 \le R < 2^8,\\
+                  1 & \text{ if }  2^8 \le R < 2^9,\\
+                  2 & \text{ if }  2^9 \le R < 2^{10},\\
+                  3 & \text{ if }  2^{10} \le R < 2^{11},\\
+                  4 & \text{ if }  2^{11} \le R < 2^{12},\\
+                  5 & \text{ if }  2^{12} \le R < 2^{13},\\
+                  6 & \text{ if }  2^{13} \le R < 2^{14},\\
+                  7 & \text{ if }  2^{14} \le R < 2^{15},\\
+                  8 & \text{ if }  2^{15} \le R < 2^{16},\\
+                  \end{cases}
+    \end{align*}
+\end{itemize}
+The value of tag($R$) is used to constrain $R$ to have a certain bit length. If tag($R$) = 0, then $R$ is atmost an 8-bit integer. If tag($R$) $\le  1$, then $R$ is atmost a 9-bit integer and so on.
+\subsection{Function Gates}%
+\label{sec:function_gates}
+Among the functions $f_1, f_2, \ldots,f_5$, we need to implement gates only for the first three, as $f_4(x,y,z) = f_2(z, x, y)$ and $f_5(x,y,z) = f_3(y, z, x)$.
+
+\subsubsection{$f_1$ gate}%
+\label{sec:f1_gate}
+Recall that $f_1(B,C,D) = B \oplus C \oplus D$ where $B,C,D$ are 32-bit words. We assume that the spread forms of the input words are available from previous operations. They might be specifically calculated for input into $f_1$ or available as outputs of other gates. The layout of the gate is as shown below, where \texttt{s\textunderscore f1} is the selector that activates it.
+\begin{center}
+  \begin{tabular}{c|c|l|l|c|c|c}
+    $\texttt{s\textunderscore f1}$ & $a_0$ & $a_1$ & $a_2$ & $a_3$ & $a_4$ & $a_5$ \\ \hline
+    1  &     & $R_0^{even}$ & spread($R_0^{even}$) & spread($B^{lo}$) & spread($C^{lo}$)  & spread($D^{lo}$)  \\ 
+       &     & $R_0^{odd}$  & spread($R_0^{odd}$)  & spread($B^{hi}$) & spread($C^{hi}$)  & spread($D^{hi}$)  \\ 
+       &     & $R_1^{even}$ & spread($R_1^{even}$) &                  &                   &                   \\ 
+       &     & $R_1^{odd}$  & spread($R_1^{odd}$)  &                  &                   &                   \\ \hline
+  \end{tabular}
+\end{center}
+
+  The following constraint is enforced by the gate.
+\begin{align*}
+  & \text{spread}(R_0^{even}) + 2\cdot \text{spread}(R_0^{odd}) + 2^{32}\text{spread}(R_1^{even}) + 2^{33}\text{spread}(R_1^{odd})  \\
+  &= \text{spread} (B^{lo}) +\text{spread} (C^{lo}) + \text{spread} (D^{lo}) + 2^{32} \left[ \text{spread} (B^{hi}) +\text{spread} (C^{hi}) + \text{spread} (D^{hi}) \right]
+\end{align*}
+The values in $R_0^{even}, R_1^{even}$ contain the output, i.e.~the low and high half-words of $f_1(B,C,D)$.
+
+\subsubsection{$f_2$ gate}%
+\label{sec:f2_gate}
+Recall that $f_2(B,C,D) = (B \wedge C) \vee (\lnot B \wedge D)$ where $B,C,D$ are 32-bit words. This function also appears in the SHA-256 compression function. Our gate implementation is the same as the one in the \texttt{halo2} SHA-256 gadget, with the exception that we compute and OR the results of $B \wedge C$ and $\lnot B \wedge D$ in a single gate. In the SHA-256 gadget, the OR calculation is deferred and rolled up into a subsequent addition operation.
+
+ As before, we assume that the spread forms of the input words are available from previous operations. The layout of the gate is as shown below, where \texttt{s\textunderscore f2f4} is the selector that activates it. The name of the selector reflects the fact that the same layout can be used for $f_4$.
+\begin{center}
+  \begin{tabular}{c|c|l|l|c|c|c}
+    $\texttt{s\textunderscore f2f4}$ & $a_0$ & $a_1$ & $a_2$ & $a_3$ & $a_4$ & $a_5$ \\ \hline
+    1  &     & $P_0^{even}$ & spread($P_0^{even}$) & spread($B^{lo}$) & spread($C^{lo}$)  &                         \\ 
+       &     & $P_0^{odd}$  & spread($P_0^{odd}$)  & spread($B^{hi}$) & spread($C^{hi}$)  &                         \\ 
+       &     & $P_1^{even}$ & spread($P_1^{even}$) &                  &                   &                         \\ 
+       &     & $P_1^{odd}$  & spread($P_1^{odd}$)  &                  &                   &                         \\
+       &     & $Q_0^{even}$ & spread($Q_0^{even}$) &                  & spread($D^{lo}$)  & spread($\lnot B^{lo}$)  \\ 
+       &     & $Q_0^{odd}$  & spread($Q_0^{odd}$)  &                  & spread($D^{hi}$)  & spread($\lnot B^{hi}$)  \\ 
+       &     & $Q_1^{even}$ & spread($Q_1^{even}$) & $sum^{lo}$       & carry             &                         \\ 
+       &     & $Q_1^{odd}$  & spread($Q_1^{odd}$)  & $sum^{hi}$       &                   &                         \\ \hline
+  \end{tabular}
+\end{center}
+
+  The following constraints are enforced by the gate.
+\begin{align*}
+  & \text{spread}(P_0^{even}) + 2\cdot \text{spread}(P_0^{odd}) + 2^{32}\text{spread}(P_1^{even}) + 2^{33}\text{spread}(P_1^{odd})  \\
+  &\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ = \text{spread} (B^{lo}) +\text{spread} (C^{lo}) + 2^{32} \left[ \text{spread} (B^{hi}) +\text{spread} (C^{hi}) \right],\\
+  & \text{spread}(2^{16}-1) = \text{spread} (B^{lo}) + \text{spread} (\lnot B^{lo}), \\
+  & \text{spread}(2^{16}-1) = \text{spread} (B^{hi}) + \text{spread} (\lnot B^{hi}), \\
+  & \text{spread}(Q_0^{even}) + 2\cdot \text{spread}(Q_0^{odd}) + 2^{32}\text{spread}(Q_1^{even}) + 2^{33}\text{spread}(Q_1^{odd})  \\
+  &\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ = \text{spread} (\lnot B^{lo}) +\text{spread} (D^{lo}) + 2^{32} \left[ \text{spread} (\lnot B^{hi}) +\text{spread} (D^{hi}) \right],\\
+  & sum^{lo} + 2^{16} sum^{hi} + 2^{32} \text{carry} = P_0^{odd} + \cdot Q_0^{odd} + 2^{16} \left[ P_1^{odd} + Q_1^{odd} \right],\\
+  & \text{carry} = 0.
+\end{align*}
+The top four rows calculate $B \wedge C$ which is present in the half-words $P_0^{odd}, P_1^{odd}$.
+The bottom four rows calculate $\lnot B \wedge D$ which is present in the half-words $Q_0^{odd}, Q_1^{odd}$.
+The values in $sum^{lo}, sum^{hi}$ contain the output, i.e.~the low and high half-words of $f_2(B,C,D)$.
+
+The values of spread($\lnot B^{lo}$) and spread($\lnot B^{hi}$) are obtained by constraining their respective sums with spread($B^{lo}$) and spread($B^{hi}$) to be \texttt{0x55555555} = spread($2^{16}-1$). Since atmost one of the bits at the same locations in $B \wedge C$ and $\lnot B \wedge D$ can be 1, the sum  $P_0^{odd} + \cdot Q_0^{odd} + 2^{16} \left[ P_1^{odd} + Q_1^{odd} \right]$ has zero carry and equals $(B \wedge C) \vee (\lnot B \wedge D)$.
+
+\subsubsection{$f_3$ gate}%
+\label{sec:f3_gate}
+Recall that $f_3(B,C,D) = (B \vee \lnot C) \oplus D$ where $B,C,D$ are 32-bit words. As before, we assume that the spread forms of the input words are available from previous operations. The layout of the gate is as shown below, where \texttt{s\textunderscore f3f5} is the selector that activates it. The name of the selector reflects the fact that the same layout can be used for $f_5$.
+\begin{center}
+  \begin{tabular}{c|c|l|l|c|c|c}
+    $\texttt{s\textunderscore f3f5}$ & $a_0$ & $a_1$ & $a_2$ & $a_3$ & $a_4$ & $a_5$ \\ \hline
+    1  &     & $sum_0^{even}$ & spread($sum_0^{even}$) & spread($\lnot C^{lo}$) & spread($B^{lo}$)  & spread($C^{lo}$)  \\ 
+       &     & $sum_0^{odd}$  & spread($sum_0^{odd}$)  & spread($\lnot C^{hi}$) & spread($B^{hi}$)  & spread($C^{hi}$)  \\ 
+       &     & $sum_1^{even}$ & spread($sum_1^{even}$) &                        &                   &                   \\ 
+       &     & $sum_1^{odd}$  & spread($sum_1^{odd}$)  &                        &                   &                   \\
+       &     & $or^{lo}$      & spread($or^{lo}$)      & spread($D^{lo}$)       &                   &                   \\ 
+       &     & $or^{hi}$      & spread($or^{hi}$)      & spread($D^{hi}$)       &                   &                   \\ 
+       &     & $R_0^{even}$   & spread($R_0^{even}$)   &                        &                   &                   \\ 
+       &     & $R_0^{odd}$    & spread($R_0^{odd}$)    &                        &                   &                   \\ 
+       &     & $R_1^{even}$   & spread($R_1^{even}$)   &                        &                   &                   \\ 
+       &     & $R_1^{odd}$    & spread($R_1^{odd}$)    &                        &                   &                   \\ \hline
+  \end{tabular}
+\end{center}
+
+  The following constraints are enforced by the gate.
+\begin{align*}
+  & \text{spread}(2^{16}-1) = \text{spread} (C^{lo}) + \text{spread} (\lnot C^{lo}), \\
+  & \text{spread}(2^{16}-1) = \text{spread} (C^{hi}) + \text{spread} (\lnot C^{hi}), \\
+  & \text{spread}(sum_0^{even}) + 2\cdot \text{spread}(sum_0^{odd}) + 2^{32}\text{spread}(sum_1^{even}) + 2^{33}\text{spread}(sum_1^{odd})  \\
+  &\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ = \text{spread} (B^{lo}) +\text{spread} (\lnot C^{lo}) + 2^{32} \left[ \text{spread} (B^{hi}) +\text{spread} (\lnot C^{hi}) \right],\\
+  & \text{spread} (or^{lo}) + 2^{32} \cdot \text{spread} (or^{hi})\\
+  &\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ = \text{spread}(sum_0^{even}) + \cdot \text{spread}(sum_0^{odd}) + 2^{32}\left[\text{spread}(sum_1^{even}) + \text{spread}(sum_1^{odd}) \right],\\
+  & \text{spread}(R_0^{even}) + 2\cdot \text{spread}(R_0^{odd}) + 2^{32}\text{spread}(R_1^{even}) + 2^{33}\text{spread}(R_1^{odd})  \\
+  &\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ = \text{spread} (or^{lo}) +\text{spread} (D^{lo}) + 2^{32} \left[ \text{spread} (or^{hi}) +\text{spread} (D^{hi}) \right].
+\end{align*}
+The top four rows calculate $\lnot C$ and $B + \lnot C$. The even bits of $B+\lnot C$ are present in the quarter-words $sum_0^{even}, sum_1^{even}$. Similarly, the odd bits of $B+\lnot C$ are present in the quarter-words $sum_0^{odd}, sum_1^{odd}$.
+
+To calculate $B \vee \lnot C$, we make use of the following observation: Suppose the sum $b+c$ of two bits $b,c$ is given by the pair of bits $sum_{odd}, sum_{even}$, where $sum_{odd}$ is the carry bit. Then $b \vee c$ equals $sum_{odd} + sum_{even}$.
+
+The bottom four rows are used to calculate the XOR of $ B \vee \lnot C$ and $D$.
+The values in $R_0^{even}, R_1^{even}$ contain the output, i.e.~the low and high half-words of $f_3(B,C,D)$.
+
+\subsection{Rotate Left Gates}%
+\label{sec:rotate_left_gates}
+We need to verify the calculation of $\texttt{rol}_s(W)$ where $W$ is a 32-bit word and $s$ ranges from 5 upto and including 15. We use a size 11 array of selectors \texttt{s\textunderscore rotate\textunderscore left} to activate each gate.
+
+\subsubsection{$\texttt{rol}_5$ gate}%
+\label{sec:rol_5_gate}
+We decompose $W = w_{31}w_{30}\cdots w_2w_1w_0$ into four parts $a^{hi}(3), a^{lo}(2), b(11), c(16)$,
+\begin{align*}
+  \underbrace{w_{31}\cdots w_{29}}_{a^{hi}(3)} \underbrace{w_{28}w_{27}}_{a^{lo}(2)}
+  \underbrace{w_{26}w_{25}w_{24}\cdots w_{16}}_{b(11)} \underbrace{w_{15}w_{14}w_{13}w_{12}\cdots w_{0}}_{c(16)},
+\end{align*}
+where the numbers in parentheses indicate lengths of the respective parts in bits. The rotated word in terms of these four parts is given by
+\begin{align*}
+  \texttt{rol}_5(W) = 
+  \underbrace{w_{26}w_{25}w_{24}\cdots w_{16}}_{b(11)} \underbrace{w_{15}w_{14}w_{13}w_{12}\cdots w_{0}}_{c(16)}
+\underbrace{w_{31}\cdots w_{29}}_{a^{hi}(3)} \underbrace{w_{28}w_{27}}_{a^{lo}(2)}.
+\end{align*}
+
+The layout of the gate is as shown below, where \texttt{s\textunderscore rotate\textunderscore left[0]} is the selector that activates it.
+
+\begin{center}
+  \begin{tabular}{c|c|l|l|c|c|c}
+    $\texttt{s\textunderscore rotate\textunderscore left[0]}$ & $a_0$ & $a_1$ & $a_2$ & $a_3$ & $a_4$ & $a_5$ \\ \hline
+    1  & tag($b(11)$) & $b(11)$ &                        & $a^{lo}(2)$ & $W^{lo}$  & $\texttt{rol}_5(W)^{lo}$  \\ 
+       &              & $c(16)$ &                        & $a^{hi}(3)$ & $W^{hi}$  & $\texttt{rol}_5(W)^{hi}$  \\ \hline
+  \end{tabular}
+\end{center}
+
+The following constraints are enforced by the gate where $\texttt{range\textunderscore check}(x, j, k) = \prod_{i=j}^k (x-i)$.
+\begin{align*}
+  W^{lo} + 2^{16} W^{hi} & = c(16) + 2^{16} b(11) + 2^{27} a^{lo}(2) + 2^{29} a^{hi}(3),\\
+  \texttt{rol}_5(W)^{lo} + 2^{16} \texttt{rol}_5(W)^{hi} & = a^{lo}(2) + 2^{2} a^{hi}(3) + 2^5 c(16) + 2^{21} b(11),\\
+  \texttt{range\textunderscore check}(a^{lo}(2), 0, 3) & = 0,\\
+  \texttt{range\textunderscore check}(a^{hi}(3), 0, 7) & = 0,\\
+  \texttt{range\textunderscore check}(\text{tag}(b(11), 0, 3) & = 0.
+\end{align*}
+The last three constraints have the following explanation.
+\begin{itemize}
+\item Restricting $a^{lo}(2)$ to the range 0 to 3 forces $a^{lo}(2)$ to be a 2-bit value.
+\item Restricting $a^{hi}(3)$ to the range 0 to 7 forces $a^{hi}(3)$ to be a 3-bit value.
+\item Restricting the tag of $b(11)$ to the range 0 to 3 forces $b(11)$ to be a 11-bit value.
+\end{itemize}
+
+\subsubsection{$\texttt{rol}_6$ gate}%
+\label{sec:rol_6_gate}
+We decompose $W = w_{31}w_{30}\cdots w_2w_1w_0$ into four parts $a^{hi}(3), a^{lo}(3), b(10), c(16)$,
+\begin{align*}
+  \underbrace{w_{31}\cdots w_{29}}_{a^{hi}(3)} \underbrace{w_{28}\cdots w_{26}}_{a^{lo}(3)}
+  \underbrace{w_{25}w_{24}w_{23}\cdots w_{16}}_{b(10)} \underbrace{w_{15}w_{14}w_{13}w_{12}\cdots w_{0}}_{c(16)},
+\end{align*}
+where the numbers in parentheses indicate lengths of the respective parts in bits. The rotated word in terms of these four parts is given by
+\begin{align*}
+  \texttt{rol}_6(W) = 
+  \underbrace{w_{26}w_{25}w_{24}\cdots w_{16}}_{b(10)} \underbrace{w_{15}w_{14}w_{13}w_{12}\cdots w_{0}}_{c(16)}
+\underbrace{w_{31}\cdots w_{29}}_{a^{hi}(3)} \underbrace{w_{28}\cdots w_{26}}_{a^{lo}(3)}.
+\end{align*}
+
+The layout of the gate is as shown below, where \texttt{s\textunderscore rotate\textunderscore left[1]} is the selector that activates it.
+
+\begin{center}
+  \begin{tabular}{c|c|l|l|c|c|c}
+    $\texttt{s\textunderscore rotate\textunderscore left[1]}$ & $a_0$ & $a_1$ & $a_2$ & $a_3$ & $a_4$ & $a_5$ \\ \hline
+    1  & tag($b(10)$) & $b(10)$ &                        & $a^{lo}(3)$ & $W^{lo}$  & $\texttt{rol}_6(W)^{lo}$  \\ 
+       &              & $c(16)$ &                        & $a^{hi}(3)$ & $W^{hi}$  & $\texttt{rol}_6(W)^{hi}$  \\ \hline
+  \end{tabular}
+\end{center}
+
+The following constraints are enforced by the gate where $\texttt{range\textunderscore check}(x, j, k) = \prod_{i=j}^k (x-i)$.
+\begin{align*}
+  W^{lo} + 2^{16} W^{hi} & = c(16) + 2^{16} b(10) + 2^{26} a^{lo}(3) + 2^{29} a^{hi}(3),\\
+  \texttt{rol}_6(W)^{lo} + 2^{16} \texttt{rol}_6(W)^{hi} & = a^{lo}(3) + 2^{3} a^{hi}(3) + 2^6 c(16) + 2^{22} b(10),\\
+  \texttt{range\textunderscore check}(a^{lo}(3), 0, 7) & = 0,\\
+  \texttt{range\textunderscore check}(a^{hi}(3), 0, 7) & = 0,\\
+  \texttt{range\textunderscore check}(\text{tag}(b(10), 0, 2) & = 0.
+\end{align*}
+The last three constraints have the following explanation.
+\begin{itemize}
+\item Restricting $a^{lo}(3)$ to the range 0 to 3 forces $a^{lo}(3)$ to be a 3-bit value.
+\item Restricting $a^{hi}(3)$ to the range 0 to 7 forces $a^{hi}(3)$ to be a 3-bit value.
+\item Restricting the tag of $b(10)$ to the range 0 to 2 forces $b(10)$ to be a 10-bit value.
+\end{itemize}
+
+
+\subsubsection{$\texttt{rol}_7$ gate}%
+\label{sec:rol_7_gate}
+We decompose $W = w_{31}w_{30}\cdots w_2w_1w_0$ into four parts $a^{hi}(4), a^{lo}(3), b(9), c(16)$,
+\begin{align*}
+  \underbrace{w_{31}\cdots w_{28}}_{a^{hi}(4)} \underbrace{w_{27}\cdots w_{25}}_{a^{lo}(3)}
+  \underbrace{w_{24}w_{23}w_{22}\cdots w_{16}}_{b(9)} \underbrace{w_{15}w_{14}w_{13}w_{12}\cdots w_{0}}_{c(16)},
+\end{align*}
+where the numbers in parentheses indicate lengths of the respective parts in bits. The rotated word in terms of these four parts is given by
+\begin{align*}
+  \texttt{rol}_7(W) = 
+  \underbrace{w_{24}w_{23}w_{22}\cdots w_{16}}_{b(9)} \underbrace{w_{15}w_{14}w_{13}w_{12}\cdots w_{0}}_{c(16)}
+\underbrace{w_{31}\cdots w_{28}}_{a^{hi}(4)} \underbrace{w_{27}\cdots w_{25}}_{a^{lo}(3)}.
+\end{align*}
+
+The layout of the gate is as shown below, where \texttt{s\textunderscore rotate\textunderscore left[2]} is the selector that activates it.
+
+\begin{center}
+  \begin{tabular}{c|c|l|l|c|c|c}
+    $\texttt{s\textunderscore rotate\textunderscore left[2]}$ & $a_0$ & $a_1$ & $a_2$ & $a_3$ & $a_4$ & $a_5$ \\ \hline
+    1  & tag($b(9)$) & $b(9)$ &                        & $a^{lo}(3)$ & $W^{lo}$  & $\texttt{rol}_7(W)^{lo}$  \\ 
+       &              & $c(16)$ &                        & $a^{hi}(4)$ & $W^{hi}$  & $\texttt{rol}_7(W)^{hi}$  \\ \hline
+  \end{tabular}
+\end{center}
+
+The following constraints are enforced by the gate where $\texttt{range\textunderscore check}(x, j, k) = \prod_{i=j}^k (x-i)$.
+\begin{align*}
+  W^{lo} + 2^{16} W^{hi} & = c(16) + 2^{16} b(10) + 2^{25} a^{lo}(3) + 2^{28} a^{hi}(4),\\
+  \texttt{rol}_7(W)^{lo} + 2^{16} \texttt{rol}_7(W)^{hi} & = a^{lo}(3) + 2^{3} a^{hi}(4) + 2^7 c(16) + 2^{23} b(10),\\
+  \texttt{range\textunderscore check}(a^{lo}(3), 0, 7) & = 0,\\
+  \texttt{range\textunderscore check}(a^{hi}(4), 0, 15) & = 0,\\
+  \texttt{range\textunderscore check}(\text{tag}(b(9), 0, 1) & = 0.
+\end{align*}
+The last three constraints have the following explanation.
+\begin{itemize}
+\item Restricting $a^{lo}(3)$ to the range 0 to 7 forces $a^{lo}(3)$ to be a 3-bit value.
+\item Restricting $a^{hi}(4)$ to the range 0 to 15 forces $a^{hi}(4)$ to be a 4-bit value.
+\item Restricting the tag of $b(9)$ to the range 0 to 1 forces $b(9)$ to be a 9-bit value.
+\end{itemize}
+
+
+\subsubsection{$\texttt{rol}_8$ gate}%
+\label{sec:rol_8_gate}
+We decompose $W = w_{31}w_{30}\cdots w_2w_1w_0$ into four parts $a^{hi}(4), a^{lo}(4), b(9), c(16)$,
+\begin{align*}
+  \underbrace{w_{31}\cdots w_{28}}_{a^{hi}(4)} \underbrace{w_{27}\cdots w_{24}}_{a^{lo}(4)}
+  \underbrace{w_{23}w_{22}w_{21}\cdots w_{16}}_{b(8)} \underbrace{w_{15}w_{14}w_{13}w_{12}\cdots w_{0}}_{c(16)},
+\end{align*}
+where the numbers in parentheses indicate lengths of the respective parts in bits. The rotated word in terms of these four parts is given by
+\begin{align*}
+  \texttt{rol}_8(W) = 
+  \underbrace{w_{23}w_{22}w_{21}\cdots w_{16}}_{b(8)} \underbrace{w_{15}w_{14}w_{13}w_{12}\cdots w_{0}}_{c(16)}
+\underbrace{w_{31}\cdots w_{28}}_{a^{hi}(4)} \underbrace{w_{27}\cdots w_{24}}_{a^{lo}(4)}.
+\end{align*}
+
+The layout of the gate is as shown below, where \texttt{s\textunderscore rotate\textunderscore left[3]} is the selector that activates it.
+
+\begin{center}
+  \begin{tabular}{c|c|l|l|c|c|c}
+    $\texttt{s\textunderscore rotate\textunderscore left[3]}$ & $a_0$ & $a_1$ & $a_2$ & $a_3$ & $a_4$ & $a_5$ \\ \hline
+    1  & tag($b(8)$) & $b(8)$ &                        & $a^{lo}(4)$ & $W^{lo}$  & $\texttt{rol}_8(W)^{lo}$  \\ 
+       &              & $c(16)$ &                        & $a^{hi}(4)$ & $W^{hi}$  & $\texttt{rol}_8(W)^{hi}$  \\ \hline
+  \end{tabular}
+\end{center}
+
+The following constraints are enforced by the gate where $\texttt{range\textunderscore check}(x, j, k) = \prod_{i=j}^k (x-i)$.
+\begin{align*}
+  W^{lo} + 2^{16} W^{hi} & = c(16) + 2^{16} b(10) + 2^{24} a^{lo}(4) + 2^{28} a^{hi}(4),\\
+  \texttt{rol}_8(W)^{lo} + 2^{16} \texttt{rol}_8(W)^{hi} & = a^{lo}(4) + 2^{4} a^{hi}(4) + 2^8 c(16) + 2^{24} b(8),\\
+  \texttt{range\textunderscore check}(a^{lo}(4), 0, 15) & = 0,\\
+  \texttt{range\textunderscore check}(a^{hi}(4), 0, 15) & = 0,\\
+  \texttt{range\textunderscore check}(\text{tag}(b(8), 0, 0) & = 0.
+\end{align*}
+The last three constraints have the following explanation.
+\begin{itemize}
+\item Restricting $a^{lo}(4)$ to the range 0 to 15 forces $a^{lo}(4)$ to be a 4-bit value.
+\item Restricting $a^{hi}(4)$ to the range 0 to 15 forces $a^{hi}(4)$ to be a 4-bit value.
+\item Restricting the tag of $b(8)$ to the range 0 to 1 forces $b(8)$ to be a 8-bit value.
+\end{itemize}
+
+\subsubsection{$\texttt{rol}_9$ gate}%
+\label{sec:rol_9_gate}
+We decompose $W = w_{31}w_{30}\cdots w_2w_1w_0$ into four parts $a(9), b^{hi}(4), b^{lo}(3), c(16)$,
+\begin{align*}
+  \underbrace{w_{31}w_{30}w_{29}\cdots w_{23}}_{a(9)} \underbrace{w_{22}\cdots w_{19}}_{b^{hi}(4)}
+  \underbrace{w_{18}\cdots w_{16}}_{b^{lo}(3)} \underbrace{w_{15}w_{14}w_{13}w_{12}\cdots w_{0}}_{c(16)},
+\end{align*}
+where the numbers in parentheses indicate lengths of the respective parts in bits. The rotated word in terms of these four parts is given by
+\begin{align*}
+  \texttt{rol}_9(W) = 
+  \underbrace{w_{22}\cdots w_{19}}_{b^{hi}(4)} \underbrace{w_{18}\cdots w_{16}}_{b^{lo}(3)}
+  \underbrace{w_{15}w_{14}w_{13}w_{12}\cdots w_{0}}_{c(16)}\underbrace{w_{31}w_{30}w_{29}\cdots w_{23}}_{a(9)}.
+\end{align*}
+
+The layout of the gate is as shown below, where \texttt{s\textunderscore rotate\textunderscore left[4]} is the selector that activates it.
+
+\begin{center}
+  \begin{tabular}{c|c|l|l|c|c|c}
+    $\texttt{s\textunderscore rotate\textunderscore left[4]}$ & $a_0$ & $a_1$ & $a_2$ & $a_3$ & $a_4$ & $a_5$ \\ \hline
+    1  & tag($a(9)$) & $a(9)$ &                        & $b^{lo}(3)$ & $W^{lo}$  & $\texttt{rol}_9(W)^{lo}$  \\ 
+       &              & $c(16)$ &                        & $b^{hi}(4)$ & $W^{hi}$  & $\texttt{rol}_9(W)^{hi}$  \\ \hline
+  \end{tabular}
+\end{center}
+
+The following constraints are enforced by the gate where $\texttt{range\textunderscore check}(x, j, k) = \prod_{i=j}^k (x-i)$.
+\begin{align*}
+  W^{lo} + 2^{16} W^{hi} & = c(16) + 2^{16} b^{lo}(3) + 2^{19} b^{hi}(4) + 2^{23} a(9),\\
+  \texttt{rol}_9(W)^{lo} + 2^{16} \texttt{rol}_9(W)^{hi} & = a(9) + 2^9 c(16) + 2^{25} b^{lo}(3) + 2^{28} b^{hi}(4),\\
+  \texttt{range\textunderscore check}(b^{lo}(3), 0, 7) & = 0,\\
+  \texttt{range\textunderscore check}(b^{hi}(4), 0, 15) & = 0,\\
+  \texttt{range\textunderscore check}(\text{tag}(a(9), 0, 1) & = 0.
+\end{align*}
+The last three constraints have the following explanation.
+\begin{itemize}
+\item Restricting $b^{lo}(3)$ to the range 0 to 7 forces $b^{lo}(3)$ to be a 3-bit value.
+\item Restricting $b^{hi}(4)$ to the range 0 to 15 forces $b^{hi}(4)$ to be a 4-bit value.
+\item Restricting the tag of $a(9)$ to the range 0 to 1 forces $a(9)$ to be a 9-bit value.
+\end{itemize}
+
+\subsubsection{$\texttt{rol}_{10}$ gate}%
+\label{sec:rol_10_gate}
+We decompose $W = w_{31}w_{30}\cdots w_2w_1w_0$ into four parts $a(10), b^{hi}(3), b^{lo}(3), c(16)$,
+\begin{align*}
+  \underbrace{w_{31}w_{30}w_{29}\cdots w_{22}}_{a(10)} \underbrace{w_{21}\cdots w_{19}}_{b^{hi}(3)}
+  \underbrace{w_{18}\cdots w_{16}}_{b^{lo}(3)} \underbrace{w_{15}w_{14}w_{13}w_{12}\cdots w_{0}}_{c(16)},
+\end{align*}
+where the numbers in parentheses indicate lengths of the respective parts in bits. The rotated word in terms of these four parts is given by
+\begin{align*}
+  \texttt{rol}_{10}(W) = 
+  \underbrace{w_{21}\cdots w_{19}}_{b^{hi}(3)} \underbrace{w_{18}\cdots w_{16}}_{b^{lo}(3)}
+  \underbrace{w_{15}w_{14}w_{13}w_{12}\cdots w_{0}}_{c(16)}\underbrace{w_{31}w_{30}w_{29}\cdots w_{22}}_{a(10)}.
+\end{align*}
+
+The layout of the gate is as shown below, where \texttt{s\textunderscore rotate\textunderscore left[5]} is the selector that activates it.
+
+\begin{center}
+  \begin{tabular}{c|c|l|l|c|c|c}
+    $\texttt{s\textunderscore rotate\textunderscore left[5]}$ & $a_0$ & $a_1$ & $a_2$ & $a_3$ & $a_4$ & $a_5$ \\ \hline
+    1  & tag($a(10)$) & $a(10)$ &                        & $b^{lo}(3)$ & $W^{lo}$  & $\texttt{rol}_{10}(W)^{lo}$  \\ 
+       &              & $c(16)$ &                        & $b^{hi}(3)$ & $W^{hi}$  & $\texttt{rol}_{10}(W)^{hi}$  \\ \hline
+  \end{tabular}
+\end{center}
+
+The following constraints are enforced by the gate where $\texttt{range\textunderscore check}(x, j, k) = \prod_{i=j}^k (x-i)$.
+\begin{align*}
+  W^{lo} + 2^{16} W^{hi} & = c(16) + 2^{16} b^{lo}(3) + 2^{19} b^{hi}(3) + 2^{22} a(10),\\
+  \texttt{rol}_{10}(W)^{lo} + 2^{16} \texttt{rol}_{10}(W)^{hi} & = a(10) + 2^{10} c(16) + 2^{26} b^{lo}(3) + 2^{29} b^{hi}(3),\\
+  \texttt{range\textunderscore check}(b^{lo}(3), 0, 7) & = 0,\\
+  \texttt{range\textunderscore check}(b^{hi}(3), 0, 7) & = 0,\\
+  \texttt{range\textunderscore check}(\text{tag}(a(10), 0, 2) & = 0.
+\end{align*}
+The last three constraints have the following explanation.
+\begin{itemize}
+\item Restricting $b^{lo}(3)$ to the range 0 to 7 forces $b^{lo}(3)$ to be a 3-bit value.
+\item Restricting $b^{hi}(3)$ to the range 0 to 7 forces $b^{hi}(3)$ to be a 3-bit value.
+\item Restricting the tag of $a(10)$ to the range 0 to 2 forces $a(10)$ to be a 10-bit value.
+\end{itemize}
+
+
+\subsubsection{$\texttt{rol}_{11}$ gate}%
+\label{sec:rol_11_gate}
+We decompose $W = w_{31}w_{30}\cdots w_2w_1w_0$ into four parts $a(11), b^{hi}(3), b^{lo}(2), c(16)$,
+\begin{align*}
+  \underbrace{w_{31}w_{30}w_{29}\cdots w_{21}}_{a(11)} \underbrace{w_{20}\cdots w_{18}}_{b^{hi}(3)}
+  \underbrace{w_{17} w_{16}}_{b^{lo}(2)} \underbrace{w_{15}w_{14}w_{13}w_{12}\cdots w_{0}}_{c(16)},
+\end{align*}
+where the numbers in parentheses indicate lengths of the respective parts in bits. The rotated word in terms of these four parts is given by
+\begin{align*}
+  \texttt{rol}_{11}(W) = 
+  \underbrace{w_{20}\cdots w_{18}}_{b^{hi}(3)} \underbrace{w_{17} w_{16}}_{b^{lo}(2)}
+  \underbrace{w_{15}w_{14}w_{13}w_{12}\cdots w_{0}}_{c(16)}\underbrace{w_{31}w_{30}w_{29}\cdots w_{21}}_{a(11)}.
+\end{align*}
+
+The layout of the gate is as shown below, where \texttt{s\textunderscore rotate\textunderscore left[6]} is the selector that activates it.
+
+\begin{center}
+  \begin{tabular}{c|c|l|l|c|c|c}
+    $\texttt{s\textunderscore rotate\textunderscore left[6]}$ & $a_0$ & $a_1$ & $a_2$ & $a_3$ & $a_4$ & $a_5$ \\ \hline
+    1  & tag($a(11)$) & $a(11)$ &                        & $b^{lo}(2)$ & $W^{lo}$  & $\texttt{rol}_{11}(W)^{lo}$  \\ 
+       &              & $c(16)$ &                        & $b^{hi}(3)$ & $W^{hi}$  & $\texttt{rol}_{11}(W)^{hi}$  \\ \hline
+  \end{tabular}
+\end{center}
+
+The following constraints are enforced by the gate where $\texttt{range\textunderscore check}(x, j, k) = \prod_{i=j}^k (x-i)$.
+\begin{align*}
+  W^{lo} + 2^{16} W^{hi} & = c(16) + 2^{16} b^{lo}(2) + 2^{18} b^{hi}(3) + 2^{21} a(11),\\
+  \texttt{rol}_{11}(W)^{lo} + 2^{16} \texttt{rol}_{11}(W)^{hi} & = a(11) + 2^{11} c(16) + 2^{27} b^{lo}(2) + 2^{29} b^{hi}(3),\\
+  \texttt{range\textunderscore check}(b^{lo}(2), 0, 3) & = 0,\\
+  \texttt{range\textunderscore check}(b^{hi}(3), 0, 7) & = 0,\\
+  \texttt{range\textunderscore check}(\text{tag}(a(11), 0, 3) & = 0.
+\end{align*}
+The last three constraints have the following explanation.
+\begin{itemize}
+\item Restricting $b^{lo}(2)$ to the range 0 to 3 forces $b^{lo}(2)$ to be a 2-bit value.
+\item Restricting $b^{hi}(3)$ to the range 0 to 7 forces $b^{hi}(3)$ to be a 3-bit value.
+\item Restricting the tag of $a(11)$ to the range 0 to 3 forces $a(11)$ to be a 11-bit value.
+\end{itemize}
+
+
+\subsubsection{$\texttt{rol}_{12}$ gate}%
+\label{sec:rol_12_gate}
+We decompose $W = w_{31}w_{30}\cdots w_2w_1w_0$ into four parts $a(12), b^{hi}(2), b^{lo}(2), c(16)$,
+\begin{align*}
+  \underbrace{w_{31}w_{30}w_{29}\cdots w_{20}}_{a(12)} \underbrace{w_{19}w_{18}}_{b^{hi}(2)}
+  \underbrace{w_{17} w_{16}}_{b^{lo}(2)} \underbrace{w_{15}w_{14}w_{13}w_{12}\cdots w_{0}}_{c(16)},
+\end{align*}
+where the numbers in parentheses indicate lengths of the respective parts in bits. The rotated word in terms of these four parts is given by
+\begin{align*}
+  \texttt{rol}_{12}(W) = 
+  \underbrace{w_{19} w_{18}}_{b^{hi}(2)} \underbrace{w_{17} w_{16}}_{b^{lo}(2)}
+  \underbrace{w_{15}w_{14}w_{13}w_{12}\cdots w_{0}}_{c(16)}\underbrace{w_{31}w_{30}w_{29}\cdots w_{20}}_{a(12)}.
+\end{align*}
+
+The layout of the gate is as shown below, where \texttt{s\textunderscore rotate\textunderscore left[7]} is the selector that activates it.
+
+\begin{center}
+  \begin{tabular}{c|c|l|l|c|c|c}
+    $\texttt{s\textunderscore rotate\textunderscore left[7]}$ & $a_0$ & $a_1$ & $a_2$ & $a_3$ & $a_4$ & $a_5$ \\ \hline
+    1  & tag($a(12)$) & $a(12)$ &                        & $b^{lo}(2)$ & $W^{lo}$  & $\texttt{rol}_{12}(W)^{lo}$  \\ 
+       &              & $c(16)$ &                        & $b^{hi}(3)$ & $W^{hi}$  & $\texttt{rol}_{12}(W)^{hi}$  \\ \hline
+  \end{tabular}
+\end{center}
+
+The following constraints are enforced by the gate where $\texttt{range\textunderscore check}(x, j, k) = \prod_{i=j}^k (x-i)$.
+\begin{align*}
+  W^{lo} + 2^{16} W^{hi} & = c(16) + 2^{16} b^{lo}(2) + 2^{18} b^{hi}(2) + 2^{20} a(12),\\
+  \texttt{rol}_{12}(W)^{lo} + 2^{16} \texttt{rol}_{12}(W)^{hi} & = a(12) + 2^{12} c(16) + 2^{28} b^{lo}(2) + 2^{30} b^{hi}(2),\\
+  \texttt{range\textunderscore check}(b^{lo}(2), 0, 3) & = 0,\\
+  \texttt{range\textunderscore check}(b^{hi}(2), 0, 3) & = 0,\\
+  \texttt{range\textunderscore check}(\text{tag}(a(12), 0, 4) & = 0.
+\end{align*}
+The last three constraints have the following explanation.
+\begin{itemize}
+\item Restricting $b^{lo}(2)$ to the range 0 to 3 forces $b^{lo}(2)$ to be a 2-bit value.
+\item Restricting $b^{hi}(2)$ to the range 0 to 3 forces $b^{hi}(2)$ to be a 2-bit value.
+\item Restricting the tag of $a(12)$ to the range 0 to 4 forces $a(12)$ to be a 12-bit value.
+\end{itemize}
+
+
+\subsubsection{$\texttt{rol}_{13}$ gate}%
+\label{sec:rol_13_gate}
+We decompose $W = w_{31}w_{30}\cdots w_2w_1w_0$ into three parts $a(13), b(3), c(16)$,
+\begin{align*}
+  \underbrace{w_{31}w_{30}w_{29}\cdots w_{19}}_{a(13)} \underbrace{w_{18}\cdots w_{16}}_{b(3)}
+  \underbrace{w_{15}w_{14}w_{13}w_{12}\cdots w_{0}}_{c(16)},
+\end{align*}
+where the numbers in parentheses indicate lengths of the respective parts in bits. The rotated word in terms of these four parts is given by
+\begin{align*}
+  \texttt{rol}_{13}(W) = 
+  \underbrace{w_{18}\cdots w_{16}}_{b(3)}
+  \underbrace{w_{15}w_{14}w_{13}w_{12}\cdots w_{0}}_{c(16)}\underbrace{w_{31}w_{30}w_{29}\cdots w_{19}}_{a(13)}.
+\end{align*}
+
+The layout of the gate is as shown below, where \texttt{s\textunderscore rotate\textunderscore left[8]} is the selector that activates it.
+
+\begin{center}
+  \begin{tabular}{c|c|l|l|c|c|c}
+    $\texttt{s\textunderscore rotate\textunderscore left[8]}$ & $a_0$ & $a_1$ & $a_2$ & $a_3$ & $a_4$ & $a_5$ \\ \hline
+    1  & tag($a(13)$) & $a(13)$ &                        & $b(3)$      & $W^{lo}$  & $\texttt{rol}_{13}(W)^{lo}$  \\ 
+       &              & $c(16)$ &                        &             & $W^{hi}$  & $\texttt{rol}_{13}(W)^{hi}$  \\ \hline
+  \end{tabular}
+\end{center}
+
+The following constraints are enforced by the gate where $\texttt{range\textunderscore check}(x, j, k) = \prod_{i=j}^k (x-i)$.
+\begin{align*}
+  W^{lo} + 2^{16} W^{hi} & = c(16) + 2^{16} b(3) + 2^{19} a(13),\\
+  \texttt{rol}_{13}(W)^{lo} + 2^{16} \texttt{rol}_{13}(W)^{hi} & = a(13) + 2^{13} c(16) + 2^{29} b(3),\\
+  \texttt{range\textunderscore check}(b(3), 0, 7) & = 0,\\
+  \texttt{range\textunderscore check}(\text{tag}(a(13), 0, 5) & = 0.
+\end{align*}
+The last two constraints have the following explanation.
+\begin{itemize}
+\item Restricting $b(3)$ to the range 0 to 7 forces $b(3)$ to be a 3-bit value.
+\item Restricting the tag of $a(13)$ to the range 0 to 5 forces $a(13)$ to be a 13-bit value.
+\end{itemize}
+
+\subsubsection{$\texttt{rol}_{14}$ gate}%
+\label{sec:rol_14_gate}
+We decompose $W = w_{31}w_{30}\cdots w_2w_1w_0$ into three parts $a(14), b(2), c(16)$,
+\begin{align*}
+  \underbrace{w_{31}w_{30}w_{29}\cdots w_{18}}_{a(14)} \underbrace{w_{17} w_{16}}_{b(2)}
+  \underbrace{w_{15}w_{14}w_{13}w_{12}\cdots w_{0}}_{c(16)},
+\end{align*}
+where the numbers in parentheses indicate lengths of the respective parts in bits. The rotated word in terms of these four parts is given by
+\begin{align*}
+  \texttt{rol}_{13}(W) = 
+  \underbrace{w_{17} w_{16}}_{b(2)}
+  \underbrace{w_{15}w_{14}w_{13}w_{12}\cdots w_{0}}_{c(16)}\underbrace{w_{31}w_{30}w_{29}\cdots w_{18}}_{a(14)}.
+\end{align*}
+
+The layout of the gate is as shown below, where \texttt{s\textunderscore rotate\textunderscore left[9]} is the selector that activates it.
+
+\begin{center}
+  \begin{tabular}{c|c|l|l|c|c|c}
+    $\texttt{s\textunderscore rotate\textunderscore left[9]}$ & $a_0$ & $a_1$ & $a_2$ & $a_3$ & $a_4$ & $a_5$ \\ \hline
+    1  & tag($a(14)$) & $a(14)$ &                        & $b(2)$      & $W^{lo}$  & $\texttt{rol}_{14}(W)^{lo}$  \\ 
+       &              & $c(16)$ &                        &             & $W^{hi}$  & $\texttt{rol}_{14}(W)^{hi}$  \\ \hline
+  \end{tabular}
+\end{center}
+
+The following constraints are enforced by the gate where $\texttt{range\textunderscore check}(x, j, k) = \prod_{i=j}^k (x-i)$.
+\begin{align*}
+  W^{lo} + 2^{16} W^{hi} & = c(16) + 2^{16} b(2) + 2^{18} a(14),\\
+  \texttt{rol}_{14}(W)^{lo} + 2^{16} \texttt{rol}_{14}(W)^{hi} & = a(14) + 2^{14} c(16) + 2^{30} b(2),\\
+  \texttt{range\textunderscore check}(b(2), 0, 3) & = 0,\\
+  \texttt{range\textunderscore check}(\text{tag}(a(14), 0, 6) & = 0.
+\end{align*}
+The last two constraints have the following explanation.
+\begin{itemize}
+\item Restricting $b(2)$ to the range 0 to 3 forces $b(2)$ to be a 2-bit value.
+\item Restricting the tag of $a(14)$ to the range 0 to 6 forces $a(14)$ to be a 14-bit value.
+\end{itemize}
+
+\subsubsection{$\texttt{rol}_{15}$ gate}%
+\label{sec:rol_15_gate}
+We decompose $W = w_{31}w_{30}\cdots w_2w_1w_0$ into three parts $a(15), b(1), c(16)$,
+\begin{align*}
+  \underbrace{w_{31}w_{30}w_{29}\cdots w_{18}}_{a(15)} \underbrace{w_{16}}_{b(1)}
+  \underbrace{w_{15}w_{14}w_{13}w_{12}\cdots w_{0}}_{c(16)},
+\end{align*}
+where the numbers in parentheses indicate lengths of the respective parts in bits. The rotated word in terms of these four parts is given by
+\begin{align*}
+  \texttt{rol}_{13}(W) = 
+  \underbrace{w_{16}}_{b(1)}
+  \underbrace{w_{15}w_{14}w_{13}w_{12}\cdots w_{0}}_{c(16)}\underbrace{w_{31}w_{30}w_{29}\cdots w_{18}}_{a(14)}.
+\end{align*}
+
+The layout of the gate is as shown below, where \texttt{s\textunderscore rotate\textunderscore left[10]} is the selector that activates it.
+
+\begin{center}
+  \begin{tabular}{c|c|l|l|c|c|c}
+    $\texttt{s\textunderscore rotate\textunderscore left[10]}$ & $a_0$ & $a_1$ & $a_2$ & $a_3$ & $a_4$ & $a_5$ \\ \hline
+    1  & tag($a(15)$) & $a(15)$ &                        & $b(1)$      & $W^{lo}$  & $\texttt{rol}_{15}(W)^{lo}$  \\ 
+       &              & $c(16)$ &                        &             & $W^{hi}$  & $\texttt{rol}_{15}(W)^{hi}$  \\ \hline
+  \end{tabular}
+\end{center}
+
+The following constraints are enforced by the gate where $\texttt{range\textunderscore check}(x, j, k) = \prod_{i=j}^k (x-i)$.
+\begin{align*}
+  W^{lo} + 2^{16} W^{hi} & = c(16) + 2^{16} b(1) + 2^{17} a(15),\\
+  \texttt{rol}_{15}(W)^{lo} + 2^{16} \texttt{rol}_{15}(W)^{hi} & = a(15) + 2^{15} c(16) + 2^{31} b(1),\\
+  \texttt{range\textunderscore check}(b(1), 0, 1) & = 0,\\
+  \texttt{range\textunderscore check}(\text{tag}(a(15), 0, 7) & = 0.
+\end{align*}
+The last two constraints have the following explanation.
+\begin{itemize}
+\item Restricting $b(1)$ to the range 0 to 3 forces $b(1)$ to be a 1-bit value.
+\item Restricting the tag of $a(15)$ to the range 0 to 7 forces $a(15)$ to be a 15-bit value.
+\end{itemize}
 
 
 

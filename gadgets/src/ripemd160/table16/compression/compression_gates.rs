@@ -13,7 +13,14 @@ impl<F: FieldExt> CompressionGate<F> {
     }
 
     // Gate for B ^ C ^ D; XOR of three 32 bit words
-    // Output is in r0_even, r1_even
+    // Output is in R_0_even, R_1_even
+    //
+    // s_f1 | a_0 |   a_1    |       a_2       |    a_3      |    a_4      |    a_5      |
+    //   1  |     | R_0_even | spread_R_0_even | spread_B_lo | spread_C_lo | spread_D_lo | 
+    //      |     | R_0_odd  | spread_R_0_odd  | spread_B_hi | spread_C_hi | spread_D_hi | 
+    //      |     | R_1_even | spread_R_1_even |             |             |             | 
+    //      |     | R_1_odd  | spread_R_1_odd  |             |             |             | 
+    // 
     #[allow(clippy::too_many_arguments)]
     pub fn f1_gate(
         s_f1: Expression<F>,
@@ -44,6 +51,18 @@ impl<F: FieldExt> CompressionGate<F> {
     // Used also for f4
     // f4(B, C, D) = (B & D) | (C & !D)
     // Output is in sum_lo, sum_hi
+    //
+    // s_f2f4 | a_0 |   a_1    |       a_2       |    a_3       |    a_4      |    a_5           |
+    //   1    |     | P_0_even | spread_P_0_even | spread_X_lo  | spread_Y_lo |                  | 
+    //        |     | P_0_odd  | spread_P_0_odd  | spread_X_hi  | spread_Y_hi |                  | 
+    //        |     | P_1_even | spread_P_1_even |              |             |                  | 
+    //        |     | P_1_odd  | spread_P_1_odd  |              |             |                  | 
+    //        |     | Q_0_even | spread_Q_0_even |              | spread_Z_lo | spread_neg_X_lo  | 
+    //        |     | Q_0_odd  | spread_Q_0_odd  |              | spread_Z_hi | spread_neg_X_hi  | 
+    //        |     | Q_1_even | spread_Q_1_even | sum_lo       | carry       |                  | 
+    //        |     | Q_1_odd  | spread_Q_1_odd  | sum_hi       |             |                  | 
+    // 
+    // Output is sum_lo, sum_hi
     #[allow(clippy::too_many_arguments)]
     pub fn f2_gate(
         s_f2f4: Expression<F>,

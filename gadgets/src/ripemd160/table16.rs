@@ -23,6 +23,7 @@ use message_schedule::*;
 use compression::*;
 use util::*;
 use super::ref_impl::constants::*;
+use super::RIPEMD160Instructions;
 
 #[derive(Clone, Copy, Debug, Default)]
 /// A word in a `Table16` message block.
@@ -307,6 +308,43 @@ impl Table16Chip {
         layouter: &mut impl Layouter<pallas::Base>,
     ) -> Result<(), Error> {
         SpreadTableChip::load(config.lookup, layouter)
+    }
+}
+
+impl RIPEMD160Instructions<pallas::Base> for Table16Chip {
+    type State = State;
+    type BlockWord = BlockWord;
+
+    fn initialization_vector(
+        &self,
+        layouter: &mut impl Layouter<pallas::Base>,
+    ) -> Result<State, Error> {
+        self.config().compression.initialize_with_iv(layouter, INITIAL_VALUES)
+    }
+
+    // Given an initialized state and an input message block, compress the
+    // message block and return the final state.
+    fn compress(
+        &self,
+        layouter: &mut impl Layouter<pallas::Base>,
+        initialized_state: &Self::State,
+        input: [Self::BlockWord; super::BLOCK_SIZE],
+    ) -> Result<Self::State, Error> {
+        let config = self.config();
+        let (_, w_halves) = config.message_schedule.process(layouter, input)?;
+        config
+            .compression
+            .compress(layouter, initialized_state.clone(), w_halves)
+    }
+
+    fn digest(
+        &self,
+        layouter: &mut impl Layouter<pallas::Base>,
+        state: &Self::State,
+    ) -> Result<[Self::BlockWord; super::DIGEST_SIZE], Error> {
+        // Copy the dense forms of the state variable chunks down to this gate.
+        // Reconstruct the 32-bit dense words.
+        self.config().compression.digest(layouter, state.clone())
     }
 }
 

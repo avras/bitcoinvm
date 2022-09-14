@@ -5,9 +5,8 @@ Based on code from https://github.com/privacy-scaling-explorations/halo2/blob/8c
 use std::convert::TryInto;
 
 use super::gates::Gate;
-use super::{AssignedBits, SpreadInputs, Table16Assignment, NUM_ADVICE_COLS};
+use super::{AssignedBits, SpreadInputs, Table16Assignment, NUM_ADVICE_COLS, BlockWord};
 use super::BLOCK_SIZE;
-use halo2::circuit::Value;
 use halo2::{
     circuit::Layouter,
     plonk::{Advice, Column, ConstraintSystem, Error, Selector},
@@ -78,7 +77,7 @@ impl MessageScheduleConfig {
     pub(super) fn process(
         &self,
         layouter: &mut impl Layouter<pallas::Base>,
-        input: [u32; BLOCK_SIZE],
+        input: [BlockWord; BLOCK_SIZE],
     ) -> Result<
         (
             [MessageWord; BLOCK_SIZE],
@@ -97,7 +96,7 @@ impl MessageScheduleConfig {
 
                 // Assign X[0..16]
                 for (row, word) in input.iter().enumerate() {
-                    let (word, halves) = self.assign_msgblk_word_and_halves(&mut region, Value::known(*word), row)?;
+                    let (word, halves) = self.assign_msgblk_word_and_halves(&mut region, word.0, row)?;
                     w.push(MessageWord(word));
                     w_halves.push(halves);
                 }

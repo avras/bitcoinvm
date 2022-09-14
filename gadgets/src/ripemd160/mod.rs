@@ -95,7 +95,6 @@ impl<F: FieldExt, RIPEMD160Chip: RIPEMD160Instructions<F>> RIPEMD160<F, RIPEMD16
     }
 
     /// Convenience function to compute hash of the data.
-    /// data feeding and finalization.
     pub fn digest(
         chip: RIPEMD160Chip,
         mut layouter: impl Layouter<F>,
@@ -104,5 +103,66 @@ impl<F: FieldExt, RIPEMD160Chip: RIPEMD160Instructions<F>> RIPEMD160<F, RIPEMD16
         let mut hasher = Self::new(chip, layouter.namespace(|| "init"))?;
         hasher.update(layouter.namespace(|| "update"), data)?;
         hasher.finalize(layouter.namespace(|| "finalize"))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use halo2::{plonk::{Circuit, ConstraintSystem, self}, halo2curves::pasta::pallas, circuit::{SimpleFloorPlanner, Layouter}, dev::MockProver};
+
+    use crate::ripemd160::{table16::{Table16Config, Table16Chip, util::{convert_byte_slice_to_u32_slice, convert_byte_slice_to_blockword_slice}, BlockWord}, RIPEMD160, ref_impl::{ripemd160::hash, constants::DIGEST_SIZE}};
+    use crate::ripemd160::ref_impl::ripemd160::pad_message_bytes;
+    use crate::ripemd160::ref_impl::constants::{BLOCK_SIZE, BLOCK_SIZE_BYTES};
+
+
+    #[test]
+    fn hash_two_blocks() {
+        struct MyCircuit {}
+
+        impl Circuit<pallas::Base> for MyCircuit {
+            type Config = Table16Config;
+            type FloorPlanner = SimpleFloorPlanner;
+            
+            fn without_witnesses(&self) -> Self {
+                MyCircuit {}
+            }
+
+            fn configure(meta: &mut ConstraintSystem<pallas::Base>) -> Self::Config {
+                Table16Chip::configure(meta)
+            }
+
+            fn synthesize(
+                &self, config: Self::Config,
+                mut layouter: impl Layouter<pallas::Base>,
+            ) -> Result<(), plonk::Error> {
+                let table16_chip = Table16Chip::construct(config.clone());
+                Table16Chip::load(config, &mut layouter)?;
+
+                let input = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789".to_vec();
+                let data: Vec<[BlockWord; BLOCK_SIZE]> = pad_message_bytes(input.clone())
+                    .into_iter()
+                    .map(convert_byte_slice_to_blockword_slice::<BLOCK_SIZE_BYTES, BLOCK_SIZE>)
+                    .collect();
+                
+                let digest = RIPEMD160::digest(table16_chip, layouter, &data)?;
+
+                let output: [u32; DIGEST_SIZE] = convert_byte_slice_to_u32_slice(hash(input));
+                for (idx, digest_word) in digest.0.iter().enumerate() {
+                    digest_word.0.assert_if_known(|v| {
+                        *v == output[idx]
+                    });
+                }
+
+                Ok(())
+            }
+        }
+
+        let circuit: MyCircuit = MyCircuit {};
+
+        let prover = match MockProver::<pallas::Base>::run(17, &circuit, vec![]) {
+            Ok(prover) => prover,
+            Err(e) => panic!("{:?}", e),
+        };
+        assert_eq!(prover.verify(), Ok(()));
     }
 }

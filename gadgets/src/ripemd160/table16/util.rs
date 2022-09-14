@@ -1,9 +1,10 @@
-use std::convert::TryInto;
-
 /*
 Code from https://github.com/privacy-scaling-explorations/halo2/blob/8c945507ceca5f4ed6e52da3672ea0308bcac812/halo2_gadgets/src/sha256/table16/util.rs
+with some new helper functions.
 */
+use std::convert::TryInto;
 use halo2::circuit::Value;
+use super::BlockWord;
 
 pub const MASK_EVEN_32: u32 = 0x55555555;
 
@@ -131,4 +132,18 @@ pub fn convert_byte_slice_to_u32_slice<const LEN_BYTES: usize, const LEN_U32: us
     }
     let a = v.as_slice();
     a.try_into().expect("Failed conversion")
+}
+
+pub fn convert_byte_slice_to_blockword_slice<const LEN_BYTES: usize, const LEN_WORD: usize>(
+    b: [u8; LEN_BYTES]
+) -> [BlockWord; LEN_WORD] {
+    assert!(LEN_BYTES == 4*LEN_WORD);
+
+    convert_byte_slice_to_u32_slice::<LEN_BYTES, LEN_WORD>(b)
+        .to_vec()
+        .into_iter()
+        .map(|i| i.into())
+        .collect::<Vec<BlockWord>>()
+        .try_into()
+        .expect("Error during byte slice to blockword slice conversion")
 }

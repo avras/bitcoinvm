@@ -15,7 +15,7 @@ mod compression;
 mod gates;
 mod message_schedule;
 mod spread_table;
-mod util;
+pub(crate) mod util;
 
 use gates::*;
 use spread_table::*;
@@ -29,6 +29,12 @@ use super::RIPEMD160Instructions;
 /// A word in a `Table16` message block.
 // TODO: Make the internals of this struct private.
 pub struct BlockWord(pub Value<u32>);
+
+impl From<u32> for BlockWord {
+    fn from(x: u32) -> Self {
+        BlockWord(Value::known(x))
+    }
+}
 
 #[derive(Clone, Debug)]
 /// Little-endian bits (up to 64 bits)

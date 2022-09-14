@@ -1,3 +1,4 @@
+use std::convert::TryInto;
 use super::constants::*;
 use super::helper_functions::*;
 
@@ -57,6 +58,34 @@ impl From<[u8; BLOCK_SIZE_BYTES]> for MessageBlock {
 
 const ROUND_FUNC_LEFT: [fn(u32,u32,u32) -> u32; 5] = [f1, f2, f3, f4, f5];
 const ROUND_FUNC_RIGHT: [fn(u32,u32,u32) -> u32; 5] = [f5, f4, f3, f2, f1];
+
+pub fn pad_message_bytes(
+    msg_bytes: Vec<u8>,
+) -> Vec<[u8; BLOCK_SIZE_BYTES]> {
+    const PAD_BYTE: u8 = 0b1000_0000;
+    let mut padded_msg: Vec<u8> = vec![];
+    padded_msg.extend(msg_bytes.clone());
+    padded_msg.push(PAD_BYTE);
+    
+    let gap: usize = BLOCK_SIZE_BYTES - (padded_msg.len() % BLOCK_SIZE_BYTES);
+    if gap < 8 {
+        padded_msg.extend(vec![0_u8; gap + 56])
+    }
+    else {
+        padded_msg.extend(vec![0_u8; gap - 8]);
+    }
+
+    let msg_len_in_bits = (msg_bytes.len() << 3) as u64;
+    padded_msg.extend(msg_len_in_bits.to_le_bytes());
+    assert!(padded_msg.len() % BLOCK_SIZE_BYTES == 0);
+
+    let mut vec_blocks : Vec<[u8; BLOCK_SIZE_BYTES]> = vec![];
+    let iter = padded_msg.chunks(BLOCK_SIZE_BYTES);
+    for block in iter {
+        vec_blocks.push(block.try_into().expect("Incorrect length"));
+    }
+    vec_blocks
+}
 
 pub fn left_step(
     round_idx: usize,
@@ -134,13 +163,6 @@ pub fn combine_left_right_states(
     next
 }
 
-pub fn compress(
-    s: State,
-    msg_block: MessageBlock,
-) -> [u8; DIGEST_SIZE_BYTES] {
-    get_compress_state(s, msg_block).into()
-}
-
 // This helper function exists to enable easier testing in the RIPEMD160 gadget
 pub fn get_compress_state(
     s: State,
@@ -156,17 +178,28 @@ pub fn get_compress_state(
     chain_state
 }
 
-pub fn compress_first_block(
-    msg_block: MessageBlock,
+pub fn hash(
+    msg: Vec<u8>
 ) -> [u8; DIGEST_SIZE_BYTES] {
-    compress(INITIAL_VALUES.into(), msg_block)
+    let msg_blocks: Vec<[u8; BLOCK_SIZE_BYTES]> = pad_message_bytes(msg);
+    assert!(msg_blocks.len() > 0);
+    let mut state = get_compress_state(INITIAL_VALUES.into(), msg_blocks[0].into());
+    for block in &msg_blocks[1..] {
+        state = get_compress_state(state, (*block).into());
+    }
+    state.into()
 }
 
 #[cfg(test)]
 mod tests {
+    use std::convert::TryInto;
+
+    use crate::ripemd160::ref_impl::ripemd160::hash;
+    use crate::ripemd160::ref_impl::ripemd160::pad_message_bytes;
+
     use super::super::constants::*;
     use super::super::helper_functions::*;
-    use super::{left_step, right_step, compress_first_block, MessageBlock, State};
+    use super::{left_step, right_step, MessageBlock, State};
     use rand::Rng;
 
     #[test]
@@ -202,8 +235,47 @@ mod tests {
     }
 
     #[test]
-    fn test_compress_first_block () {
-        assert_eq!(compress_first_block(PADDED_TEST_INPUT_ABC.into()), TEST_INPUT_HASH_ABC);
-        assert_eq!(compress_first_block(PADDED_TEST_INPUT_A2Z.into()), TEST_INPUT_HASH_A2Z);
+    fn test_hash () {
+        assert_eq!(hash(b"abc".to_vec()), TEST_INPUT_HASH_ABC);
+        assert_eq!(hash(b"abcdefghijklmnopqrstuvwxyz".to_vec()), TEST_INPUT_HASH_A2Z);
+        
+        // Test case from https://homes.esat.kuleuven.be/~bosselae/ripemd160.html
+        let mut h = [0; DIGEST_SIZE_BYTES];
+        hex::decode_to_slice("b0e20b6e3116640286ed3a87a5713079b21f5189", &mut h).expect("Error");
+        assert_eq!(
+            hash(b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789".to_vec()),
+            h,
+        );
+    }
+
+    #[test]
+    fn test_padding () {
+        {
+            let msg: Vec<u8> = b"abc".to_vec();
+            let blocks: Vec<[u8; BLOCK_SIZE_BYTES]> = pad_message_bytes(msg);
+            assert_eq!(blocks.len(), 1);
+            assert_eq!(blocks[0], PADDED_TEST_INPUT_ABC);
+        }
+        {
+            let msg: Vec<u8> = b"abcdefghijklmnopqrstuvwxyz".to_vec();
+            let blocks: Vec<[u8; BLOCK_SIZE_BYTES]> = pad_message_bytes(msg);
+            assert_eq!(blocks.len(), 1);
+            assert_eq!(blocks[0], PADDED_TEST_INPUT_A2Z);
+        }
+        {
+            let msg: Vec<u8> = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789".to_vec();
+            let blocks: Vec<[u8; BLOCK_SIZE_BYTES]> = pad_message_bytes(msg.clone());
+            assert_eq!(blocks.len(), 2);
+            assert_eq!(blocks[0][..msg.len()].to_vec(), msg);
+
+            // Check pad byte
+            pub const PAD_BYTE: u8 = 0b1000_0000;
+            assert_eq!(blocks[0][msg.len()], PAD_BYTE);
+
+            // Checks zeros and length
+            assert_eq!(blocks[0][msg.len()+1..], vec![0_u8; BLOCK_SIZE_BYTES-msg.len()-1]);
+            assert_eq!(blocks[1][..BLOCK_SIZE_BYTES-8], vec![0_u8; BLOCK_SIZE_BYTES-8]);
+            assert_eq!(u64::from_le_bytes(blocks[1][56..].try_into().expect("error")), (msg.len() << 3) as u64);
+        }
     }
 }

@@ -775,12 +775,11 @@ impl CompressionConfig {
 #[cfg(test)]
 mod tests {
     use crate::ripemd160::ref_impl::constants::{
-        PADDED_TEST_INPUT_ABC,
         BLOCK_SIZE_BYTES,
         BLOCK_SIZE,
         INITIAL_VALUES, DIGEST_SIZE,
     };
-    use crate::ripemd160::ref_impl::ripemd160::get_compress_state;
+    use crate::ripemd160::ref_impl::ripemd160::{hash, pad_message_bytes};
     use crate::ripemd160::table16::AssignedBits;
     use crate::ripemd160::table16::compression::compression_util::match_state;
     use crate::ripemd160::table16::util::convert_byte_slice_to_u32_slice;
@@ -820,10 +819,9 @@ mod tests {
                 Table16Chip::load(config.clone(), &mut layouter)?;
 
                 // Test vector: "abc"
-                // let input: [BlockWord; BLOCK_SIZE] = msg_schedule_test_input();
-                let input_bytes: [u8; BLOCK_SIZE_BYTES] = PADDED_TEST_INPUT_ABC;
-                let input: [u32; BLOCK_SIZE] = convert_byte_slice_to_u32_slice::<BLOCK_SIZE_BYTES, BLOCK_SIZE>(input_bytes);
-                let output: [u32; DIGEST_SIZE] = get_compress_state(INITIAL_VALUES.into(), input_bytes.into()).into();
+                let input_bytes = b"abc";
+                let input: [u32; BLOCK_SIZE] = convert_byte_slice_to_u32_slice::<BLOCK_SIZE_BYTES, BLOCK_SIZE>(pad_message_bytes(input_bytes.to_vec())[0]);
+                let output: [u32; DIGEST_SIZE] = convert_byte_slice_to_u32_slice(hash(input_bytes.to_vec()));
 
                 let (_, w_halves) = config.message_schedule.process(&mut layouter, input)?;
 

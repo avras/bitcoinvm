@@ -15,3 +15,6 @@ keywords = ["halo", "proofs", "zcash", "zkp", "zkSNARKs", "bitcoin"]
 [dependencies]
 rand = "0.8"
 halo2 = { package = "halo2_proofs", git = "https://github.com/privacy-scaling-explorations/halo2", branch = "abstraction" }
+
+[dev-dependencies]
+hex = "0.4.3"

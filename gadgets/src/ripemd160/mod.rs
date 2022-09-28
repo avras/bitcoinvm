@@ -6,7 +6,7 @@ pub mod ref_impl;
 pub mod table16;
 use std::fmt;
 
-use halo2::{
+use halo2_proofs::{
     arithmetic::FieldExt,
     circuit::{Chip, Layouter},
     plonk::Error,
@@ -108,7 +108,7 @@ impl<F: FieldExt, RIPEMD160Chip: RIPEMD160Instructions<F>> RIPEMD160<F, RIPEMD16
 
 #[cfg(test)]
 mod tests {
-    use halo2::{plonk::{Circuit, ConstraintSystem, self}, halo2curves::pasta::pallas, circuit::{SimpleFloorPlanner, Layouter}, dev::MockProver};
+    use halo2_proofs::{plonk::{Circuit, ConstraintSystem, self}, halo2curves::pasta::pallas, circuit::{SimpleFloorPlanner, Layouter}, dev::MockProver};
 
     use crate::ripemd160::{table16::{Table16Config, Table16Chip, util::{convert_byte_slice_to_u32_slice, convert_byte_slice_to_blockword_slice}, BlockWord}, RIPEMD160, ref_impl::{ripemd160::hash, constants::DIGEST_SIZE}};
     use crate::ripemd160::ref_impl::ripemd160::pad_message_bytes;

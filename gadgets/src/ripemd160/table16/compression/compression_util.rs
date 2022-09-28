@@ -5,11 +5,11 @@ use crate::ripemd160::table16::util::{i2lebsp, even_bits, odd_bits, lebs2ip, neg
 
 use super::{CompressionConfig, RoundWordSpread, RoundWordDense, RoundWord, StateWord, State};
 
-use halo2::{
+use halo2_proofs::{
     circuit::{Region, Value},
     plonk::Error,
 };
-use halo2::halo2curves::pasta::pallas;
+use halo2_proofs::halo2curves::pasta::pallas;
 use std::convert::TryInto;
 
 

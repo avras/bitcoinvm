@@ -3,7 +3,7 @@ Code from https://github.com/privacy-scaling-explorations/halo2/blob/8c945507cec
 with some new helper functions.
 */
 use std::convert::TryInto;
-use halo2::circuit::Value;
+use halo2_proofs::circuit::Value;
 use super::BlockWord;
 
 pub const MASK_EVEN_32: u32 = 0x55555555;

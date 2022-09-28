@@ -5,11 +5,11 @@ use std::convert::TryInto;
 use std::marker::PhantomData;
 
 //use super::Sha256Instructions;
-use halo2::{
+use halo2_proofs::{
     circuit::{AssignedCell, Chip, Layouter, Region, Value},
     plonk::{Advice, Any, Assigned, Column, ConstraintSystem, Error},
 };
-use halo2::halo2curves::pasta::pallas;
+use halo2_proofs::halo2curves::pasta::pallas;
 
 mod compression;
 mod gates;
@@ -126,7 +126,7 @@ impl<const LEN: usize> AssignedBits<LEN> {
 
         let column: Column<Any> = column.into();
         match column.column_type() {
-            Any::Advice => {
+            Any::Advice(_) => {
                 region.assign_advice(annotation, column.try_into().unwrap(), offset, || {
                     value.clone()
                 })
@@ -161,7 +161,7 @@ impl AssignedBits<16> {
         let column: Column<Any> = column.into();
         let value: Value<Bits<16>> = value.map(|v| v.into());
         match column.column_type() {
-            Any::Advice => {
+            Any::Advice(_) => {
                 region.assign_advice(annotation, column.try_into().unwrap(), offset, || {
                     value.clone()
                 })
@@ -196,7 +196,7 @@ impl AssignedBits<32> {
         let column: Column<Any> = column.into();
         let value: Value<Bits<32>> = value.map(|v| v.into());
         match column.column_type() {
-            Any::Advice => {
+            Any::Advice(_) => {
                 region.assign_advice(annotation, column.try_into().unwrap(), offset, || {
                     value.clone()
                 })

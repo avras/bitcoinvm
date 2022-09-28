@@ -2,7 +2,7 @@
 Modified version of code from https://github.com/privacy-scaling-explorations/halo2/blob/8c945507ceca5f4ed6e52da3672ea0308bcac812/halo2_gadgets/src/sha256/table16/gates.rs
 */
 
-use halo2::{arithmetic::FieldExt, plonk::Expression};
+use halo2_proofs::{arithmetic::FieldExt, plonk::Expression};
 
 pub struct Gate<F: FieldExt>(pub Expression<F>);
 

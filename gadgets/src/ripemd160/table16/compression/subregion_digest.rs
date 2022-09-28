@@ -1,7 +1,7 @@
 use super::super::BlockWord;
 use super::{CompressionConfig, State, DIGEST_SIZE};
 use super::compression_util::*;
-use halo2::{
+use halo2_proofs::{
     circuit::Region,
     plonk::Error, halo2curves::pasta::pallas,
 };

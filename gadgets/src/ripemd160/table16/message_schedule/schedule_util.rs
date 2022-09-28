@@ -3,12 +3,12 @@ use crate::ripemd160::table16::Table16Assignment;
 use super::super::AssignedBits;
 use super::MessageScheduleConfig;
 
-use halo2::{
+use halo2_proofs::{
     circuit::{Region, Value},
     plonk::Error,
 };
 
-use halo2::halo2curves::pasta::pallas;
+use halo2_proofs::halo2curves::pasta::pallas;
 use super::super::message_schedule::BLOCK_SIZE;
 
 

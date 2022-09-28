@@ -1,5 +1,5 @@
 use super::super::{util::*, Gate};
-use halo2::{
+use halo2_proofs::{
     arithmetic::FieldExt,
     plonk::{Constraints, Expression},
 };
@@ -881,10 +881,10 @@ impl<F: FieldExt> CompressionGate<F> {
 
 #[cfg(test)]
 mod tests {
-    use halo2::plonk::{Circuit, ConstraintSystem, Error};
-    use halo2::halo2curves::{pasta::Fp};
-    use halo2::circuit::{SimpleFloorPlanner, Layouter, Region, Value};
-    use halo2::dev::MockProver;
+    use halo2_proofs::plonk::{Circuit, ConstraintSystem, Error};
+    use halo2_proofs::halo2curves::{pasta::Fp};
+    use halo2_proofs::circuit::{SimpleFloorPlanner, Layouter, Region, Value};
+    use halo2_proofs::dev::MockProver;
     use rand::Rng;
 
     use crate::ripemd160::ref_impl::helper_functions::{rol, f2, f4, f3, f5, f1};

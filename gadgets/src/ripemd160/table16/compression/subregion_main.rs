@@ -2,8 +2,8 @@ use crate::ripemd160::ref_impl::constants::{BLOCK_SIZE, MSG_SEL_IDX_LEFT, ROUND_
 use super::super::{AssignedBits, StateWord, ROUND_CONSTANTS_LEFT};
 use super::RoundSide::{self, Left, Right};
 use super::{compression_util::*, CompressionConfig, State, RoundWordDense};
-use halo2::{circuit::Region, plonk::Error};
-use halo2::halo2curves::pasta::pallas;
+use halo2_proofs::{circuit::Region, plonk::Error};
+use halo2_proofs::halo2curves::pasta::pallas;
 
 impl CompressionConfig {
     #[allow(clippy::many_single_char_names)]

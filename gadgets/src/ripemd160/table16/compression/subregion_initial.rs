@@ -2,11 +2,11 @@ use crate::ripemd160::{ref_impl::constants::DIGEST_SIZE, table16::Table16Assignm
 
 use super::{CompressionConfig, State, RoundWordDense, RoundWordSpread, RoundWord, StateWord};
 
-use halo2::{
+use halo2_proofs::{
     circuit::{Region, Value},
     plonk::Error,
 };
-use halo2::halo2curves::pasta::pallas;
+use halo2_proofs::halo2curves::pasta::pallas;
 
 impl CompressionConfig {
     #[allow(clippy::many_single_char_names)]

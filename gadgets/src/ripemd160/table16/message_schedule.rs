@@ -7,12 +7,12 @@ use std::convert::TryInto;
 use super::gates::Gate;
 use super::{AssignedBits, SpreadInputs, Table16Assignment, NUM_ADVICE_COLS, BlockWord};
 use super::BLOCK_SIZE;
-use halo2::{
+use halo2_proofs::{
     circuit::Layouter,
     plonk::{Advice, Column, ConstraintSystem, Error, Selector},
     poly::Rotation,
 };
-use halo2::halo2curves::pasta::pallas;
+use halo2_proofs::halo2curves::pasta::pallas;
 
 mod schedule_util;
 

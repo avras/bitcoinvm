@@ -6,12 +6,12 @@ use super::{
     AssignedBits, BlockWord, SpreadInputs, Table16Assignment, ROUNDS, DIGEST_SIZE, NUM_ADVICE_COLS,
 };
 use super::gates::Gate;
-use halo2::{
+use halo2_proofs::{
     circuit::{Layouter, Value},
     plonk::{Advice, Column, ConstraintSystem, Error, Selector},
     poly::Rotation,
 };
-use halo2::halo2curves::pasta::pallas;
+use halo2_proofs::halo2curves::pasta::pallas;
 
 mod compression_gates;
 mod compression_util;
@@ -787,13 +787,13 @@ mod tests {
     use super::super::{
         Table16Chip, Table16Config,
     };
-    use halo2::circuit::Value;
-    use halo2::{
+    use halo2_proofs::circuit::Value;
+    use halo2_proofs::{
         circuit::{Layouter, SimpleFloorPlanner},
         dev::MockProver,
         plonk::{Circuit, ConstraintSystem, Error},
     };
-    use halo2::halo2curves::pasta::pallas;
+    use halo2_proofs::halo2curves::pasta::pallas;
 
     #[test]
     fn test_compression() {

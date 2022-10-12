@@ -12,3 +12,6 @@ pub const OP_1NEGATE: usize                 = 0x4f;
 pub const OP_RESERVED: usize                = 0x50;
 pub const OP_1: usize                       = 0x51;
 pub const OP_16: usize                      = 0x60;
+
+// Flow control opcodes https://en.bitcoin.it/wiki/Script#Flow_control
+pub const OP_NOP: usize                     = 0x61;

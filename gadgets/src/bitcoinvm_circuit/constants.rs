@@ -1,6 +1,14 @@
 pub const MAX_SCRIPT_PUBKEY_SIZE : usize = 520;
 pub const MAX_STACK_DEPTH : usize = 33;
 
+// A stack element is evaluates to true if it consists of non-zero bytes,
+// except when the non-zero bytes encode a negative zero (0x80).
+pub const NEGATIVE_ZERO : u64 = 0x80;
+
+// OP_0 pushes an empty array of bytes onto the stack in Bitcoin. The empty array evaluates to false.
+// So we represent the empty array by the negative zero.
+pub const EMPTY_ARRAY_REPRESENTATION : u64 = NEGATIVE_ZERO;
+
 // Data push opcodes https://en.bitcoin.it/wiki/Script#Constants
 pub const OP_0: usize                       = 0x00;
 pub const OP_PUSH_NEXT1: usize              = 0x01;

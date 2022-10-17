@@ -293,9 +293,9 @@ impl<F: Field> ExecutionChip<F> {
                 * num_data_bytes_remaining_is_zero.expr()
                 * num_data_length_bytes_remaining_is_zero.expr();
 
-            // Data byte pushes leave a RLC of the the bytes at stack_top. But the RLC is unlikely to be equal to 256.
-            // OP_0 pushes an empty array of bytes onto the stack in Bitcoin. We represent the empty array by 256.
-            let value_to_push = 256u64.expr();
+            // OP_0 pushes an empty array of bytes onto the stack in Bitcoin. The empty array evaluates to false.
+            // So we represent the empty array by the negative zero.
+            let value_to_push = EMPTY_ARRAY_REPRESENTATION.expr();
             let stack_top = meta.query_advice(stack[0], Rotation::cur());
             let mut constraints = vec![is_relevant_opcode.clone() * (stack_top - value_to_push)];
             

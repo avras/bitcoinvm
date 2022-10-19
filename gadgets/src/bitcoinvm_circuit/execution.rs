@@ -8,7 +8,7 @@ use super::opcode_table::{OpcodeTableConfig, OpcodeTableChip};
 
 use crate::Field;
 use crate::bitcoinvm_circuit::util::is_zero::IsZeroInstruction;
-use crate::bitcoinvm_circuit::util::opcode::{opcode_enabled, op0_indicator, pushdata1_indicator, pushdata2_indicator, pushdata4_indicator, op1_to_op16_indicator, push1_to_push75_indicator, checksig_indicator};
+use crate::bitcoinvm_circuit::util::script_parser::*;
 
 
 #[derive(Clone, Debug)]
@@ -1041,140 +1041,7 @@ impl<F: Field> ExecutionChip<F> {
     }
 }
 
-struct ScriptPubkeyParseState<F: Field> {
-    randomness: F,
-    stack: [F; MAX_STACK_DEPTH],
-    num_data_bytes_remaining: u64,
-    next_num_data_bytes_remaining: u64,
-    num_data_length_bytes_remaining: u64,
-    next_num_data_length_bytes_remaining: u64,
-    num_data_length_acc_constant: u64,
-    pk_rlc_acc: F,
-    num_checksig_opcodes: u64,
-}
-
-impl<F: Field> ScriptPubkeyParseState<F> {
-    fn new(
-        randomness: F,
-        initial_stack: [F; MAX_STACK_DEPTH],
-    ) -> Self {
-        Self {
-            randomness,
-            stack: initial_stack,
-            num_data_bytes_remaining: 0,
-            next_num_data_bytes_remaining: 0,
-            num_data_length_bytes_remaining: 0,
-            next_num_data_length_bytes_remaining: 0,
-            num_data_length_acc_constant: 0,
-            pk_rlc_acc: F::zero(),
-            num_checksig_opcodes: 0,
-        }
-    }
-
-    fn update(
-        &mut self,
-        opcode: u8,
-    ) -> () {
-        let opcode = opcode as usize;
-        let (a,b,c,d) = (
-            self.num_data_bytes_remaining,
-            self.next_num_data_bytes_remaining,
-            self.num_data_length_bytes_remaining,
-            self.next_num_data_length_bytes_remaining,
-        );
-        if (a, b, c, d) == (0, 0, 0, 0) || (a, b, c, d) == (1, 0, 0, 0) {
-                if self.num_data_bytes_remaining == 1 {
-                    self.num_data_bytes_remaining = 0;
-                }
-                if opcode == OP_0 {
-                    for i in (1..MAX_STACK_DEPTH).rev() {
-                        self.stack[i] = self.stack[i-1];
-                    }
-                    self.stack[0] = F::from(256u64);
-                }
-                else if opcode >= OP_1 && opcode <= OP_16 {
-                    for i in (1..MAX_STACK_DEPTH).rev() {
-                        self.stack[i] = self.stack[i-1];
-                    }
-                    self.stack[0] = F::from((opcode - OP_RESERVED) as u64);
-                }
-                else if opcode >= OP_PUSH_NEXT1 && opcode <= OP_PUSH_NEXT75 {
-                   self.next_num_data_bytes_remaining = opcode as u64; 
-                    for i in (1..MAX_STACK_DEPTH).rev() {
-                        self.stack[i] = self.stack[i-1];
-                    }
-                    self.stack[0] = F::zero();
-                }
-                else if opcode >= OP_PUSHDATA1 && opcode <= OP_PUSHDATA4 {
-                    self.next_num_data_length_bytes_remaining = 1u64 << (opcode - OP_PUSHDATA1);
-                    self.num_data_bytes_remaining = 0;
-                    for i in (1..MAX_STACK_DEPTH).rev() {
-                        self.stack[i] = self.stack[i-1];
-                    }
-                    self.stack[0] = F::zero();
-                }
-                else if opcode == OP_CHECKSIG {
-                    self.pk_rlc_acc = self.pk_rlc_acc * self.randomness + self.stack[0];
-                    self.stack[0] = self.stack[1]; // Signature is assumed to be F::zero or F::one
-                    // Shift stack elements on step to the left (up)
-                    for i in 2..MAX_STACK_DEPTH {
-                        self.stack[i-1] = self.stack[i];
-                    }
-                    // Last element is forced to be zero
-                    self.stack[MAX_STACK_DEPTH-1] = F::zero();
-                    // Increment num_checksig_opcodes
-                    self.num_checksig_opcodes += 1;
-                }
-        }
-        else if self.next_num_data_bytes_remaining > 0 && self.num_data_bytes_remaining == 0 {
-            // Accumulate data byte into stack top
-            self.stack[0] = F::from(opcode as u64) + self.randomness * self.stack[0];
-            // Replace num_data_bytes_remaining
-            self.num_data_bytes_remaining = self.next_num_data_bytes_remaining;
-            self.next_num_data_bytes_remaining = 0;
-            self.num_data_length_bytes_remaining = 0;
-        }
-        else if self.num_data_bytes_remaining > 0 && self.num_data_length_bytes_remaining == 0 {
-            // Accumulate data byte into stack top
-            self.stack[0] = F::from(opcode as u64) + self.randomness * self.stack[0];
-            // Decrement number of remaining data bytes
-            self.num_data_bytes_remaining -= 1;
-        }
-        else if self.num_data_bytes_remaining > 0 && self.num_data_length_bytes_remaining == 1 {
-            // Accumulate data byte into stack top
-            self.stack[0] = F::from(opcode as u64) + self.randomness * self.stack[0];
-            // Decrement number of remaining data length bytes
-            self.num_data_length_bytes_remaining = 0;
-        }
-        else if self.next_num_data_length_bytes_remaining > 0 && self.num_data_length_bytes_remaining == 0 {
-            self.num_data_length_bytes_remaining = self.next_num_data_length_bytes_remaining;
-            self.next_num_data_length_bytes_remaining = 0;
-
-            self.num_data_bytes_remaining = 0;
-            self.num_data_length_acc_constant = 1;
-            self.num_data_bytes_remaining += (opcode as u64) * self.num_data_length_acc_constant;
-            if self.next_num_data_length_bytes_remaining == 1 {
-                // These assignments help pick the correct if branch in the next iteration
-                self.next_num_data_bytes_remaining = self.num_data_bytes_remaining;
-                self.num_data_bytes_remaining = 0;
-            }
-        }
-        else if self.num_data_length_bytes_remaining > 0 {
-            self.num_data_length_acc_constant *= 256u64;
-            self.num_data_bytes_remaining += (opcode as u64) * self.num_data_length_acc_constant;
-            if self.num_data_length_bytes_remaining == 1 {
-                // These assignments help pick the correct if branch in the next iteration
-                self.next_num_data_bytes_remaining = self.num_data_bytes_remaining;
-                self.num_data_bytes_remaining = 0;
-            }
-            else {
-                // Decrement number of remaining data length bytes
-                self.num_data_length_bytes_remaining -= 1;
-            }
-        }
-    }
     
-}
 
 #[cfg(test)]
 mod tests {

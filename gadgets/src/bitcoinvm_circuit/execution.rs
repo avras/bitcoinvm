@@ -8,7 +8,7 @@ use super::opcode_table::{OpcodeTableConfig, OpcodeTableChip};
 
 use crate::Field;
 use crate::bitcoinvm_circuit::util::is_zero::IsZeroInstruction;
-use crate::bitcoinvm_circuit::util::opcode::{opcode_enabled, op0_indicator, pushdata1_indicator, pushdata2_indicator, pushdata4_indicator, op1_to_op16_indicator, push1_to_push75_indicator};
+use crate::bitcoinvm_circuit::util::opcode::{opcode_enabled, op0_indicator, pushdata1_indicator, pushdata2_indicator, pushdata4_indicator, op1_to_op16_indicator, push1_to_push75_indicator, checksig_indicator};
 
 
 #[derive(Clone, Debug)]
@@ -31,20 +31,27 @@ pub(crate) struct ExecutionConfig<F: Field> {
     is_opcode_pushdata1: Column<Advice>,
     is_opcode_pushdata2: Column<Advice>,
     is_opcode_pushdata4: Column<Advice>,
+    is_opcode_checksig: Column<Advice>,
 
-    script_rlc_acc: Column<Advice>,
     // Columns to track the parsing of script
+    script_rlc_acc: Column<Advice>,
     num_script_bytes_remaining: Column<Advice>,
     num_script_bytes_remaining_inv: Column<Advice>,
     num_script_bytes_remaining_is_zero: IsZeroConfig<F>,
 
     // Stack state
     stack: [Column<Advice>; MAX_STACK_DEPTH],
+    
+    // Columns to help verify that the top stack element is false
+    is_stack_top_false_inv: Column<Advice>,
+    is_stack_top_false: IsZeroConfig<F>,
 
+    // Columns to help with data push operations
     num_data_bytes_remaining: Column<Advice>,
     num_data_bytes_remaining_inv: Column<Advice>,
     num_data_bytes_remaining_is_zero: IsZeroConfig<F>,
 
+    // Columns to help with OP_PUSDATA1, OP_PUSHDATA2, OP_PUSHDATA4
     num_data_length_bytes_remaining: Column<Advice>,
     num_data_length_bytes_remaining_inv: Column<Advice>,
     num_data_length_bytes_remaining_is_zero: IsZeroConfig<F>,
@@ -52,12 +59,22 @@ pub(crate) struct ExecutionConfig<F: Field> {
     num_data_length_bytes_remaining_is_one: IsZeroConfig<F>,
     num_data_length_acc_constant: Column<Advice>,
 
+    // Public key accumulator OP_CHECKSIG opcodes
+    pk_rlc_acc: Column<Advice>,
+    num_checksig_opcodes: Column<Advice>,
 }
 
 
 #[derive(Debug, Clone)]
 struct ExecutionChip<F: Field> {
     config: ExecutionConfig<F>,
+}
+struct ExecutionChipAssignedCells<F: Field> {
+    script_length: AssignedCell<F, F>,
+    script_rlc_acc_init: AssignedCell<F, F>,
+    randomness: AssignedCell<F, F>,
+    pk_rlc_acc: AssignedCell<F, F>,
+    num_checksig_opcodes: AssignedCell<F, F>,
 }
 
 impl<F: Field> ExecutionChip<F> {
@@ -92,10 +109,26 @@ impl<F: Field> ExecutionChip<F> {
         meta.enable_equality(is_opcode_pushdata2);
         let is_opcode_pushdata4 = meta.advice_column();
         meta.enable_equality(is_opcode_pushdata4);
+        let is_opcode_checksig = meta.advice_column();
+        meta.enable_equality(is_opcode_checksig);
+
         let script_rlc_acc = meta.advice_column();
         meta.enable_equality(script_rlc_acc);
         let stack = [(); MAX_STACK_DEPTH].map(|_| meta.advice_column());
         stack.iter().for_each(|c| meta.enable_equality(*c));
+
+        let is_stack_top_false_inv = meta.advice_column();
+        meta.enable_equality(is_stack_top_false_inv);
+        let is_stack_top_false = IsZeroChip::configure(
+            meta,
+            |meta| meta.query_selector(q_execution),
+            |meta| {
+                let stack_top = meta.query_advice(stack[0], Rotation::cur());
+                stack_top.clone() * (stack_top - NEGATIVE_ZERO.expr()) // Stack top is false iff it is zero or negative zero
+            },
+            is_stack_top_false_inv,
+        );
+
 
         let num_script_bytes_remaining = meta.advice_column();
         meta.enable_equality(num_script_bytes_remaining);
@@ -156,8 +189,14 @@ impl<F: Field> ExecutionChip<F> {
             is_opcode_pushdata1,
             is_opcode_pushdata2,
             is_opcode_pushdata4,
-
+            is_opcode_checksig,
         );
+
+        let pk_rlc_acc = meta.advice_column();
+        meta.enable_equality(pk_rlc_acc);
+
+        let num_checksig_opcodes = meta.advice_column();
+        meta.enable_equality(num_checksig_opcodes);
 
         meta.create_gate("First row constraints", |meta| {
             let q_first = meta.query_selector(q_first);
@@ -176,11 +215,13 @@ impl<F: Field> ExecutionChip<F> {
             let next_num_data_length_bytes_remaining = meta.query_advice(num_data_length_bytes_remaining, Rotation::next());
             // Next num_data_length_bytes_remaining is also zero
             constraints.push(q_first.clone() * next_num_data_length_bytes_remaining);
-            for s in stack {
-                let stack_column = meta.query_advice(s, Rotation::cur());
-                // All stack contents in first row are zero
-                constraints.push(q_first.clone() * stack_column);
-            }
+
+            let first_row_pk_rlc_acc = meta.query_advice(pk_rlc_acc, Rotation::cur());
+            // The public key accumulator in the first row is zero
+            constraints.push(q_first.clone() * first_row_pk_rlc_acc);
+            let first_row_num_checksig_opcodes = meta.query_advice(num_checksig_opcodes, Rotation::cur());
+            // The number of OP_CHECKSIG opcodes in the first row is zero
+            constraints.push(q_first.clone() * first_row_num_checksig_opcodes);
             constraints
         });
 
@@ -247,6 +288,15 @@ impl<F: Field> ExecutionChip<F> {
             // Padding opcodes are all OP_NOP
             constraints.push(is_script_read_complete * (opcode - (OP_NOP as u64).expr()));
             constraints
+        });
+
+        meta.create_gate("Top stack element is true after script is read", |meta| {
+            let q_execution = meta.query_selector(q_execution);
+            vec![
+                q_execution
+                * is_stack_top_false.expr()
+                * num_script_bytes_remaining_is_zero.expr()
+            ]
         });
 
         meta.create_gate("Only supported opcodes allowed", |meta| {
@@ -453,6 +503,75 @@ impl<F: Field> ExecutionChip<F> {
             constraints
         });
 
+        meta.create_gate("OP_CHECKSIG", |meta| {
+            let q_execution = meta.query_selector(q_execution);
+            let is_opcode_checksig = meta.query_advice(is_opcode_checksig, Rotation::cur());
+            let is_cur_byte_checksig = (1u8.expr() - num_script_bytes_remaining_is_zero.expr())
+                * is_opcode_checksig.clone()
+                * num_data_bytes_remaining_is_zero.expr()
+                * num_data_length_bytes_remaining_is_zero.expr();
+            let is_relevant_opcode = q_execution.clone() * is_cur_byte_checksig.clone();
+            let is_cur_byte_not_checksig = q_execution * (1u8.expr() - is_cur_byte_checksig);
+
+            // The second stack item must have the signature when OP_CHECKSIG is evaluated
+            let sig_item = meta.query_advice(stack[1], Rotation::prev());
+            // Signature values are forced to either 0 or 1. A zero value implies invalid signature and one
+            // value implies valid signature
+            let mut constraints = vec![
+                is_relevant_opcode.clone() * sig_item.clone() * (1u8.expr() - sig_item.clone())
+            ];
+            // The first stack item must have the public key when OP_CHECKSIG is evaluated
+            let pk_item = meta.query_advice(stack[0], Rotation::prev());
+            let prev_pk_rlc_acc = meta.query_advice(pk_rlc_acc, Rotation::prev());
+            let cur_pk_rlc_acc = meta.query_advice(pk_rlc_acc, Rotation::cur());
+            // If the current opcode is not a OP_CHECKSIG, then the pk_item is not accumulated
+            constraints.push(
+                is_cur_byte_not_checksig.clone()
+                * (prev_pk_rlc_acc.clone() - cur_pk_rlc_acc.clone()) 
+            );
+            
+            let randomness = meta.query_advice(randomness, Rotation::cur());
+            // If sig_item is non-zero, then the pk_item is accumulated
+            constraints.push(
+                is_relevant_opcode.clone()
+                * sig_item.clone()
+                * (prev_pk_rlc_acc * randomness + pk_item - cur_pk_rlc_acc) 
+            );
+            
+            let prev_num_checksig_opcodes = meta.query_advice(num_checksig_opcodes, Rotation::prev());
+            let cur_num_checksig_opcodes = meta.query_advice(num_checksig_opcodes, Rotation::cur());
+            // If the current opcode is not a OP_CHECKSIG, then the number of checksig opcodes is unchanged
+            constraints.push(
+                is_cur_byte_not_checksig
+                * (prev_num_checksig_opcodes.clone() - cur_num_checksig_opcodes.clone()) 
+            );
+            // If sig_item is non-zero, then the number of checksig opcodes is incremented
+            constraints.push(
+                is_relevant_opcode.clone()
+                * sig_item.clone()
+                * (prev_num_checksig_opcodes + 1u8.expr() - cur_num_checksig_opcodes) 
+            );
+            
+            // The first item in the current stack is forced to be equal to the sig_item value
+            // Our convention is the valid signature is indicated by sig_item = 1
+            let cur_stack_top = meta.query_advice(stack[0], Rotation::cur());
+            constraints.push(
+                is_relevant_opcode.clone()
+                * (cur_stack_top - sig_item)
+            );
+
+            // Check that the stack items at indices 2 to MAX_STACK_DEPTH-1 to are shifted to the left
+            for i in 2..MAX_STACK_DEPTH {
+                let current_stack_item = meta.query_advice(stack[i-1], Rotation::cur());
+                let prev_stack_item  = meta.query_advice(stack[i], Rotation::prev());
+                constraints.push(is_relevant_opcode.clone() * (current_stack_item - prev_stack_item));
+            }
+            let cur_stack_bottom = meta.query_advice(stack[MAX_STACK_DEPTH-1], Rotation::cur());
+            // The last item in the current stack is forced to be zero
+            constraints.push(is_relevant_opcode.clone() * cur_stack_bottom);
+            constraints
+        });
+
         ExecutionConfig {
             instance,
             randomness,
@@ -467,11 +586,14 @@ impl<F: Field> ExecutionChip<F> {
             is_opcode_pushdata1,
             is_opcode_pushdata2,
             is_opcode_pushdata4,
+            is_opcode_checksig,
             script_rlc_acc,
             num_script_bytes_remaining,
             num_script_bytes_remaining_inv,
             num_script_bytes_remaining_is_zero,
             stack,
+            is_stack_top_false_inv,
+            is_stack_top_false,
             num_data_bytes_remaining,
             num_data_bytes_remaining_inv,
             num_data_bytes_remaining_is_zero,
@@ -481,6 +603,8 @@ impl<F: Field> ExecutionChip<F> {
             num_data_length_bytes_remaining_minus_one_inv,
             num_data_length_bytes_remaining_is_one,
             num_data_length_acc_constant,
+            pk_rlc_acc,
+            num_checksig_opcodes,
         }
     }
 
@@ -489,7 +613,8 @@ impl<F: Field> ExecutionChip<F> {
         layouter: &mut impl Layouter<F>,
         script_pubkey: Vec<u8>,
         randomness: F,
-    ) -> Result<(AssignedCell<F, F>, AssignedCell<F, F>, AssignedCell<F, F>), Error> {
+        initial_stack: [F; MAX_STACK_DEPTH],
+    ) -> Result<ExecutionChipAssignedCells<F>, Error> {
         assert!(script_pubkey.len() <= MAX_SCRIPT_PUBKEY_SIZE);
 
         OpcodeTableChip::load(self.config.opcode_table.clone(), layouter)?;
@@ -500,49 +625,50 @@ impl<F: Field> ExecutionChip<F> {
 
                 self.config.q_first.enable(&mut region, 0)?;
 
-                let script_length_cell = region.assign_advice(
-                    || "Byte length of scriptPubkey",
-                    self.config.num_script_bytes_remaining,
-                    0,
-                    || Value::known(F::from(script_pubkey.len() as u64)),
-                )?;
+                macro_rules! assign_first_row {
+                    ($annotation:expr, $column:ident, $val:expr) => {
+                        region.assign_advice(
+                            || $annotation,
+                            self.config.$column,
+                            0,
+                            || Value::known($val),
+                        )?
+                    };
+                    ($annotation:expr, $column:ident) => {
+                        region.assign_advice(
+                            || $annotation,
+                            self.config.$column,
+                            0,
+                            || Value::known(F::zero()),
+                        )?
+                    };
+                }
 
-                let randomness_cell = region.assign_advice(
-                    || "Randomness for RLC operations",
-                    self.config.randomness,
-                    0,
-                    || Value::known(randomness),
-                )?;
+                let script_length_cell = assign_first_row!(
+                    "Byte length of scriptPubkey",
+                    num_script_bytes_remaining,
+                    F::from(script_pubkey.len() as u64)
+                );
+
+                let randomness_cell =
+                    assign_first_row!("Randomness of RLC operations", randomness, randomness);
 
                 for i in 0..MAX_STACK_DEPTH {
                     region.assign_advice(
                         || "Initialize stack to zero elements",
                         self.config.stack[i],
                         0,
-                        || Value::known(F::zero()),
+                        || Value::known(initial_stack[i]),
                     )?;
                 }
 
-                region.assign_advice(
-                    || "Initialize num_data_bytes_remaining to zero",
-                    self.config.num_data_bytes_remaining,
-                    0,
-                    || Value::known(F::zero()),
-                )?;
-
-                region.assign_advice(
-                    || "Initialize num_data_length_bytes_remaining to zero",
-                    self.config.num_data_length_bytes_remaining,
-                    0,
-                    || Value::known(F::zero()),
-                )?;
-
-                region.assign_advice(
-                    || "Initialize num_data_length_acc_constant to zero",
-                    self.config.num_data_length_acc_constant,
-                    0,
-                    || Value::known(F::zero()),
-                )?;
+                assign_first_row!("Initialize num_data_bytes_remaining to zero", num_data_bytes_remaining);
+                assign_first_row!("Initialize num_data_length_bytes_remaining to zero", num_data_length_bytes_remaining);
+                assign_first_row!("Initialize num_data_length_acc_constant to zero", num_data_length_acc_constant);
+                let mut pk_rlc_acc_cell =
+                    assign_first_row!("Initialize pk_rlc_acc to zero", pk_rlc_acc);
+                let mut num_checksig_opcodes_cell =
+                    assign_first_row!("Initialize num_checksig_opcodes to zero", num_checksig_opcodes);
 
                 let mut script_rlc_acc_vec = vec![];
                 let mut acc_value = F::zero();
@@ -556,15 +682,13 @@ impl<F: Field> ExecutionChip<F> {
                 // Reverse the script_rlc_acc running sum vector
                 script_rlc_acc_vec.reverse();
 
-                let script_rlc_acc_init_cell = region.assign_advice(
-                    || "Initialize script_rlc_acc",
-                    self.config.script_rlc_acc,
-                    0,
-                    || Value::known(script_rlc_acc_vec[0]),
-                )?;
+                let script_rlc_acc_init_cell =
+                    assign_first_row!("Initialize script_rlc_acc", script_rlc_acc, script_rlc_acc_vec[0]);
 
                 let num_script_bytes_remaining_is_zero_chip
                     = IsZeroChip::construct(self.config.num_script_bytes_remaining_is_zero.clone());
+                let is_stack_top_false_chip
+                    = IsZeroChip::construct(self.config.is_stack_top_false.clone());
                 let num_data_bytes_remaining_is_zero_chip
                     = IsZeroChip::construct(self.config.num_data_bytes_remaining_is_zero.clone());
                 let num_data_length_bytes_remaining_is_zero_chip
@@ -572,7 +696,7 @@ impl<F: Field> ExecutionChip<F> {
                 let num_data_length_bytes_remaining_is_one_chip
                     = IsZeroChip::construct(self.config.num_data_length_bytes_remaining_is_one.clone());
 
-                let mut script_state = ScriptPubkeyParseState::new(randomness);
+                let mut script_state = ScriptPubkeyParseState::new(randomness, initial_stack);
                 
                 for byte_index in 0..MAX_SCRIPT_PUBKEY_SIZE+1 { // an extra row is assigned as queries are made to next rows
                     
@@ -619,6 +743,7 @@ impl<F: Field> ExecutionChip<F> {
                             Value::known(num_script_bytes_remaining),
                         )?;
 
+                        // The state of the script parser is updated
                         script_state.update(script_pubkey[byte_index]);
 
                         region.assign_advice(
@@ -712,6 +837,13 @@ impl<F: Field> ExecutionChip<F> {
                             self.config.is_opcode_pushdata4,
                             offset,
                             || Value::known(F::from(pushdata4_indicator(script_pubkey[byte_index]))),
+                        )?;
+
+                        region.assign_advice(
+                            || "Load is_opcode_checksig column",
+                            self.config.is_opcode_checksig,
+                            offset,
+                            || Value::known(F::from(checksig_indicator(script_pubkey[byte_index]))),
                         )?;
 
                     }
@@ -849,6 +981,13 @@ impl<F: Field> ExecutionChip<F> {
                             || Value::known(F::zero()),
                         )?;
 
+                        region.assign_advice(
+                            || "Load is_opcode_checksig column",
+                            self.config.is_opcode_checksig,
+                            offset,
+                            || Value::known(F::zero()),
+                        )?;
+
                     }
 
                     for i in 0..MAX_STACK_DEPTH {
@@ -860,10 +999,34 @@ impl<F: Field> ExecutionChip<F> {
                         )?;
                     }
 
+                    pk_rlc_acc_cell = region.assign_advice(
+                        || "Load pk_rlc_acc column",
+                        self.config.pk_rlc_acc,
+                        offset,
+                        || Value::known(script_state.pk_rlc_acc),
+                    )?;
 
-                    
+                    num_checksig_opcodes_cell = region.assign_advice(
+                        || "Load num_checksig_opcodes column",
+                        self.config.num_checksig_opcodes,
+                        offset,
+                        || Value::known(F::from(script_state.num_checksig_opcodes)),
+                    )?;
+
+                    is_stack_top_false_chip.assign(
+                        &mut region,
+                        offset,
+                        Value::known(script_state.stack[0] *(script_state.stack[0] - F::from(NEGATIVE_ZERO))),
+                    )?;
+
                 }
-                Ok((script_length_cell, script_rlc_acc_init_cell, randomness_cell))
+                Ok(ExecutionChipAssignedCells {
+                        script_length: script_length_cell,
+                        script_rlc_acc_init: script_rlc_acc_init_cell,
+                        randomness: randomness_cell,
+                        pk_rlc_acc: pk_rlc_acc_cell.clone(),
+                        num_checksig_opcodes: num_checksig_opcodes_cell.clone(),
+                })
             }
         )
     }
@@ -886,20 +1049,25 @@ struct ScriptPubkeyParseState<F: Field> {
     num_data_length_bytes_remaining: u64,
     next_num_data_length_bytes_remaining: u64,
     num_data_length_acc_constant: u64,
+    pk_rlc_acc: F,
+    num_checksig_opcodes: u64,
 }
 
 impl<F: Field> ScriptPubkeyParseState<F> {
     fn new(
         randomness: F,
+        initial_stack: [F; MAX_STACK_DEPTH],
     ) -> Self {
         Self {
             randomness,
-            stack: [F::zero(); MAX_STACK_DEPTH],
+            stack: initial_stack,
             num_data_bytes_remaining: 0,
             next_num_data_bytes_remaining: 0,
             num_data_length_bytes_remaining: 0,
             next_num_data_length_bytes_remaining: 0,
             num_data_length_acc_constant: 0,
+            pk_rlc_acc: F::zero(),
+            num_checksig_opcodes: 0,
         }
     }
 
@@ -908,12 +1076,16 @@ impl<F: Field> ScriptPubkeyParseState<F> {
         opcode: u8,
     ) -> () {
         let opcode = opcode as usize;
-        if (
+        let (a,b,c,d) = (
             self.num_data_bytes_remaining,
             self.next_num_data_bytes_remaining,
             self.num_data_length_bytes_remaining,
             self.next_num_data_length_bytes_remaining,
-        ) == (0, 0, 0, 0) {
+        );
+        if (a, b, c, d) == (0, 0, 0, 0) || (a, b, c, d) == (1, 0, 0, 0) {
+                if self.num_data_bytes_remaining == 1 {
+                    self.num_data_bytes_remaining = 0;
+                }
                 if opcode == OP_0 {
                     for i in (1..MAX_STACK_DEPTH).rev() {
                         self.stack[i] = self.stack[i-1];
@@ -940,6 +1112,18 @@ impl<F: Field> ScriptPubkeyParseState<F> {
                         self.stack[i] = self.stack[i-1];
                     }
                     self.stack[0] = F::zero();
+                }
+                else if opcode == OP_CHECKSIG {
+                    self.pk_rlc_acc = self.pk_rlc_acc * self.randomness + self.stack[0];
+                    self.stack[0] = self.stack[1]; // Signature is assumed to be F::zero or F::one
+                    // Shift stack elements on step to the left (up)
+                    for i in 2..MAX_STACK_DEPTH {
+                        self.stack[i-1] = self.stack[i];
+                    }
+                    // Last element is forced to be zero
+                    self.stack[MAX_STACK_DEPTH-1] = F::zero();
+                    // Increment num_checksig_opcodes
+                    self.num_checksig_opcodes += 1;
                 }
         }
         else if self.next_num_data_bytes_remaining > 0 && self.num_data_bytes_remaining == 0 {
@@ -988,7 +1172,6 @@ impl<F: Field> ScriptPubkeyParseState<F> {
                 self.num_data_length_bytes_remaining -= 1;
             }
         }
-
     }
     
 }
@@ -1000,6 +1183,7 @@ mod tests {
     use halo2_proofs::circuit::{SimpleFloorPlanner, Layouter};
     use halo2_proofs::plonk::{Circuit, ConstraintSystem, Error};
     use rand::Rng;
+    use secp256k1::constants::PUBLIC_KEY_SIZE;
 
     use crate::bitcoinvm_circuit::constants::*;
     use crate::bitcoinvm_circuit::execution::ExecutionConfig;
@@ -1010,6 +1194,7 @@ mod tests {
     struct MyCircuit<F: Field> {
         pub script_pubkey: Vec<u8>,
         pub randomness: F,
+        pub initial_stack: [F; MAX_STACK_DEPTH],
     }
 
     impl<F: Field> Circuit<F> for MyCircuit<F> {
@@ -1021,6 +1206,7 @@ mod tests {
             Self {
                 script_pubkey: vec![],
                 randomness: F::zero(),
+                initial_stack: [F::zero(); MAX_STACK_DEPTH],
             }
         }
 
@@ -1035,15 +1221,16 @@ mod tests {
         ) -> Result<(), Error> {
             let chip = ExecutionChip::construct(config);
 
-            let (script_length_cell, script_rlc_acc_init_cell,randomness_cell)  = chip.assign_script_pubkey_unroll(
+            let chip_cells  = chip.assign_script_pubkey_unroll(
                 &mut layouter,
                 self.script_pubkey.clone(),
-                self.randomness
+                self.randomness,
+                self.initial_stack,
             )?;
             
-            chip.expose_public(layouter.namespace(|| "script_length"), script_length_cell, 0)?;
-            chip.expose_public(layouter.namespace(|| "script_rlc_acc"), script_rlc_acc_init_cell, 1)?;
-            chip.expose_public(layouter.namespace(|| "randomness"), randomness_cell, 2)?;
+            chip.expose_public(layouter.namespace(|| "script_length"), chip_cells.script_length, 0)?;
+            chip.expose_public(layouter.namespace(|| "script_rlc_acc"), chip_cells.script_rlc_acc_init, 1)?;
+            chip.expose_public(layouter.namespace(|| "randomness"), chip_cells.randomness, 2)?;
             Ok(())
         }
     }
@@ -1063,6 +1250,7 @@ mod tests {
         let circuit = MyCircuit {
             script_pubkey: script_pubkey.clone(),
             randomness,
+            initial_stack: [BnScalar::zero(); MAX_STACK_DEPTH],
         };
         script_pubkey.reverse();
         let script_rlc_init = script_pubkey.clone().into_iter().fold(BnScalar::zero(), |acc, v| {
@@ -1098,6 +1286,7 @@ mod tests {
         let circuit = MyCircuit {
             script_pubkey: script_pubkey.clone(),
             randomness,
+            initial_stack: [BnScalar::zero(); MAX_STACK_DEPTH],
         };
         script_pubkey.reverse();
         let script_rlc_init = script_pubkey.clone().into_iter().fold(BnScalar::zero(), |acc, v| {
@@ -1134,6 +1323,7 @@ mod tests {
         let circuit = MyCircuit {
             script_pubkey: script_pubkey.clone(),
             randomness,
+            initial_stack: [BnScalar::zero(); MAX_STACK_DEPTH],
         };
         script_pubkey.reverse();
         let script_rlc_init = script_pubkey.clone().into_iter().fold(BnScalar::zero(), |acc, v| {
@@ -1175,6 +1365,7 @@ mod tests {
         let circuit = MyCircuit {
             script_pubkey: script_pubkey.clone(),
             randomness,
+            initial_stack: [BnScalar::zero(); MAX_STACK_DEPTH],
         };
         script_pubkey.reverse();
         let script_rlc_init = script_pubkey.clone().into_iter().fold(BnScalar::zero(), |acc, v| {
@@ -1222,7 +1413,54 @@ mod tests {
         let circuit = MyCircuit {
             script_pubkey: script_pubkey.clone(),
             randomness,
+            initial_stack: [BnScalar::zero(); MAX_STACK_DEPTH],
         };
+        script_pubkey.reverse();
+        let script_rlc_init = script_pubkey.clone().into_iter().fold(BnScalar::zero(), |acc, v| {
+            acc * randomness + BnScalar::from(v as u64)
+        });
+
+        let public_input = vec![
+            BnScalar::from(script_pubkey.len() as u64),
+            script_rlc_init,
+            randomness,
+        ];
+
+        let prover = MockProver::run(k, &circuit, vec![public_input.clone()]).unwrap();
+        prover.assert_satisfied();
+    }
+
+    use secp256k1::{self, Secp256k1, SecretKey, PublicKey};
+
+    #[test]
+    fn test_script_pubkey_checksig() {
+        let k = 10;
+
+        let secp = Secp256k1::new();
+        let secret_key = SecretKey::from_slice(&[0xcd; 32]).expect("32 bytes, within curve order");
+        let public_key = PublicKey::from_secret_key(&secp, &secret_key);
+        let public_key_bytes: [u8; PUBLIC_KEY_SIZE] = public_key.serialize();
+        
+        let mut script_pubkey: Vec<u8> = vec![];
+        script_pubkey.push(PUBLIC_KEY_SIZE as u8); // "Push 33 bytes" opcode
+        for i in 0..PUBLIC_KEY_SIZE {
+            script_pubkey.push(public_key_bytes[i]);
+        }
+        script_pubkey.push(OP_CHECKSIG as u8);
+
+        let mut rng = rand::thread_rng();
+        let r: u64 = rng.gen();
+        let randomness: BnScalar = BnScalar::from(r);
+        let mut initial_stack_vec = vec![BnScalar::one()];
+        initial_stack_vec.extend_from_slice(&[BnScalar::zero(); MAX_STACK_DEPTH-1]);
+        let initial_stack: [BnScalar; MAX_STACK_DEPTH] = initial_stack_vec.as_slice().try_into().unwrap();
+
+        let circuit = MyCircuit {
+            script_pubkey: script_pubkey.clone(),
+            randomness,
+            initial_stack,
+        };
+
         script_pubkey.reverse();
         let script_rlc_init = script_pubkey.clone().into_iter().fold(BnScalar::zero(), |acc, v| {
             acc * randomness + BnScalar::from(v as u64)

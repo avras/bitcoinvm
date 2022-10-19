@@ -23,3 +23,6 @@ pub const OP_16: usize                      = 0x60;
 
 // Flow control opcodes https://en.bitcoin.it/wiki/Script#Flow_control
 pub const OP_NOP: usize                     = 0x61;
+
+// Cryptographic operations opcodes https://en.bitcoin.it/wiki/Script#Crypto
+pub const OP_CHECKSIG: usize                = 0xac;

@@ -18,3 +18,4 @@ halo2_proofs = { git = "https://github.com/privacy-scaling-explorations/halo2", 
 
 [dev-dependencies]
 hex = "0.4.3"
+secp256k1 = "0.24.0"

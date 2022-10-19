@@ -6,7 +6,8 @@ pub(crate) mod opcode{
 
     pub fn opcode_enabled(opcode: u8) -> u64 {
         let opcode = opcode as usize;
-        if opcode <= OP_NOP && opcode != OP_1NEGATE && opcode != OP_RESERVED {
+        if (opcode <= OP_NOP && opcode != OP_1NEGATE && opcode != OP_RESERVED)
+        || opcode == OP_CHECKSIG {
             1
         }
         else {
@@ -33,6 +34,7 @@ pub(crate) mod opcode{
     opcode_indicator!(pushdata1_indicator, OP_PUSHDATA1);
     opcode_indicator!(pushdata2_indicator, OP_PUSHDATA2);
     opcode_indicator!(pushdata4_indicator, OP_PUSHDATA4);
+    opcode_indicator!(checksig_indicator, OP_CHECKSIG);
 
     macro_rules! opcode_range_indicator {
         ($name:ident, $opval_min:expr, $opval_max:expr) => {

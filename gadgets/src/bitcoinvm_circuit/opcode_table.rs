@@ -19,6 +19,7 @@ pub(super) struct OpcodeInputs {
     pub(super) is_opcode_pushdata1: Column<Advice>,
     pub(super) is_opcode_pushdata2: Column<Advice>,
     pub(super) is_opcode_pushdata4: Column<Advice>,
+    pub(super) is_opcode_checksig: Column<Advice>,
 }
 
 #[derive(Clone, Debug)]
@@ -32,6 +33,7 @@ pub(super) struct OpcodeTable {
     pub(super) is_opcode_pushdata1: TableColumn,
     pub(super) is_opcode_pushdata2: TableColumn,
     pub(super) is_opcode_pushdata4: TableColumn,
+    pub(super) is_opcode_checksig: TableColumn,
 }
 
 #[derive(Clone, Debug)]
@@ -71,6 +73,7 @@ impl<F: FieldExt> OpcodeTableChip<F> {
         is_opcode_pushdata1: Column<Advice>,
         is_opcode_pushdata2: Column<Advice>,
         is_opcode_pushdata4: Column<Advice>,
+        is_opcode_checksig: Column<Advice>,
     ) -> <Self as Chip<F>>::Config {
         let table_q_execution = meta.lookup_table_column();
         let table_opcode = meta.lookup_table_column();
@@ -81,6 +84,7 @@ impl<F: FieldExt> OpcodeTableChip<F> {
         let table_is_opcode_pushdata1 = meta.lookup_table_column();
         let table_is_opcode_pushdata2 = meta.lookup_table_column();
         let table_is_opcode_pushdata4 = meta.lookup_table_column();
+        let table_is_opcode_checksig = meta.lookup_table_column();
 
         meta.lookup("Opcode properties table", |meta| {
             let q_execution_cur = meta.query_selector(q_execution);
@@ -92,6 +96,7 @@ impl<F: FieldExt> OpcodeTableChip<F> {
             let is_opcode_pushdata1_cur = meta.query_advice(is_opcode_pushdata1, Rotation::cur());
             let is_opcode_pushdata2_cur = meta.query_advice(is_opcode_pushdata2, Rotation::cur());
             let is_opcode_pushdata4_cur = meta.query_advice(is_opcode_pushdata4, Rotation::cur());
+            let is_opcode_checksig_cur = meta.query_advice(is_opcode_checksig, Rotation::cur());
             vec![
                 (q_execution_cur,                table_q_execution),
                 (input_opcode_cur,               table_opcode),
@@ -102,6 +107,7 @@ impl<F: FieldExt> OpcodeTableChip<F> {
                 (is_opcode_pushdata1_cur,        table_is_opcode_pushdata1),
                 (is_opcode_pushdata2_cur,        table_is_opcode_pushdata2),
                 (is_opcode_pushdata4_cur,        table_is_opcode_pushdata4),
+                (is_opcode_checksig_cur,         table_is_opcode_checksig),
             ]
         });
 
@@ -115,7 +121,8 @@ impl<F: FieldExt> OpcodeTableChip<F> {
                 is_opcode_push1_to_push75,
                 is_opcode_pushdata1,
                 is_opcode_pushdata2,
-                is_opcode_pushdata4 
+                is_opcode_pushdata4,
+                is_opcode_checksig,
             }, 
             table: OpcodeTable {
                 q_execution: table_q_execution,
@@ -126,7 +133,8 @@ impl<F: FieldExt> OpcodeTableChip<F> {
                 is_opcode_push1_to_push75: table_is_opcode_push1_to_push75,
                 is_opcode_pushdata1: table_is_opcode_pushdata1,
                 is_opcode_pushdata2: table_is_opcode_pushdata2,
-                is_opcode_pushdata4: table_is_opcode_pushdata4
+                is_opcode_pushdata4: table_is_opcode_pushdata4,
+                is_opcode_checksig: table_is_opcode_checksig,
             }
         }
     }
@@ -156,7 +164,8 @@ impl<F: FieldExt> OpcodeTableChip<F> {
                         || Value::known(F::from(opcode as u64)),
                     )?;
 
-                    if opcode <= OP_NOP && opcode != OP_1NEGATE && opcode != OP_RESERVED {
+                    if (opcode <= OP_NOP && opcode != OP_1NEGATE && opcode != OP_RESERVED)
+                    || (opcode == OP_CHECKSIG) {
                         table.assign_cell(
                             || "opcode enabled",
                             config.table.is_opcode_enabled,
@@ -197,6 +206,7 @@ impl<F: FieldExt> OpcodeTableChip<F> {
                     assign_is_opcode(OP_PUSHDATA1, config.table.is_opcode_pushdata1)?;
                     assign_is_opcode(OP_PUSHDATA2, config.table.is_opcode_pushdata2)?;
                     assign_is_opcode(OP_PUSHDATA4, config.table.is_opcode_pushdata4)?;
+                    assign_is_opcode(OP_CHECKSIG, config.table.is_opcode_checksig)?;
 
                     let mut assign_is_opcode_in_range
                         = |min_val: usize, max_val: usize, t: TableColumn| -> Result<(), Error> {
@@ -246,6 +256,7 @@ impl<F: FieldExt> OpcodeTableChip<F> {
                 assign_zero!("pushdata1", is_opcode_pushdata1);
                 assign_zero!("pushdata2", is_opcode_pushdata2);
                 assign_zero!("pushdata4", is_opcode_pushdata4);
+                assign_zero!("checksig", is_opcode_checksig);
 
                 Ok(())
             },

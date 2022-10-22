@@ -14,7 +14,13 @@ keywords = ["halo", "proofs", "zcash", "zkp", "zkSNARKs", "bitcoin"]
 
 [dependencies]
 rand = "0.8"
+itertools = "0.10.3"
+lazy_static = "1.4"
 halo2_proofs = { git = "https://github.com/privacy-scaling-explorations/halo2", tag = "v2022_09_10" }
+ecdsa =         { git = "https://github.com/privacy-scaling-explorations/halo2wrong", tag = "v2022_09_09" }
+ecc =           { git = "https://github.com/privacy-scaling-explorations/halo2wrong", tag = "v2022_09_09" }
+maingate =      { git = "https://github.com/privacy-scaling-explorations/halo2wrong", tag = "v2022_09_09" }
+integer =       { git = "https://github.com/privacy-scaling-explorations/halo2wrong", tag = "v2022_09_09" }
 
 [dev-dependencies]
 hex = "0.4.3"

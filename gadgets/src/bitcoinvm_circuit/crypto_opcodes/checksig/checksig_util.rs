@@ -1,12 +1,13 @@
 use ecc::GeneralEccChip;
 use ecdsa::ecdsa::EcdsaChip;
-use halo2_proofs::{arithmetic::FieldExt, plonk::{Expression, Error, Column, Advice}, halo2curves::secp256k1::{Secp256k1Affine, self}, circuit::{AssignedCell, Region}};
+use halo2_proofs::{arithmetic::FieldExt, plonk::{Expression, Error, Column, Advice}, halo2curves::secp256k1::{Secp256k1Affine, self}, circuit::Region};
 use integer::{AssignedInteger, IntegerChip};
-use maingate::{AssignedValue, RegionCtx, MainGate, MainGateInstructions, RangeChip, RangeInstructions};
+use maingate::{AssignedValue, RegionCtx, MainGate, RangeChip, RangeInstructions};
 
 use crate::bitcoinvm_circuit::constants::{NUMBER_OF_LIMBS, BIT_LEN_LIMB};
 use crate::Field;
 use itertools::Itertools;
+use subtle::CtOption;
 
 pub fn range_check<F: FieldExt> (value: Expression<F>, lower_range: u64, upper_range: u64) -> Expression<F> {
     let one = Expression::Constant(F::one());
@@ -15,6 +16,12 @@ pub fn range_check<F: FieldExt> (value: Expression<F>, lower_range: u64, upper_r
         expr = expr * (one.clone() * (-F::one()) * F::from(i) + value.clone())
     }
     expr
+}
+
+/// Helper function to convert a `CtOption` into an `Result`.  Similar to
+/// `Option::ok_or`.
+pub fn ct_option_ok_or<T, E>(v: CtOption<T>, err: E) -> Result<T, E> {
+    Option::<T>::from(v).ok_or(err)
 }
 
 /// Return a copy of the serialized public key with swapped Endianness.
@@ -62,24 +69,6 @@ pub(crate) mod rlc {
 pub(crate) struct AssignedPublicKeyBytes<F: Field> {
     pub(crate) pk_x_le: [AssignedValue<F>; 32],
     pub(crate) pk_y_le: [AssignedValue<F>; 32],
-}
-
-#[derive(Debug)]
-pub(crate) struct AssignedPublicKeyRLC<F: Field> {
-    pub(crate) pk_rlc: AssignedCell<F, F>,
-}
-
-// Returns assigned constants [256^1, 256^2, .., 256^{n-1}]
-pub(crate) fn assign_pows_256<F: Field>(
-    ctx: &mut RegionCtx<'_, F>,
-    main_gate: &MainGate<F>,
-    n: usize,
-) -> Result<Vec<AssignedValue<F>>, Error> {
-    let mut pows = Vec::new();
-    for i in 1..n {
-        pows.push(main_gate.assign_constant(ctx, F::from(256).pow(&[i as u64, 0, 0, 0]))?);
-    }
-    Ok(pows)
 }
 
 // Return an array of bytes that corresponds to the little endian representation

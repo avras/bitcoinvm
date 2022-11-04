@@ -21,7 +21,10 @@ ecdsa =         { git = "https://github.com/privacy-scaling-explorations/halo2wr
 ecc =           { git = "https://github.com/privacy-scaling-explorations/halo2wrong", tag = "v2022_09_09" }
 maingate =      { git = "https://github.com/privacy-scaling-explorations/halo2wrong", tag = "v2022_09_09" }
 integer =       { git = "https://github.com/privacy-scaling-explorations/halo2wrong", tag = "v2022_09_09" }
+libsecp256k1 = "0.7"
+subtle = "2.4"
 
 [dev-dependencies]
 hex = "0.4.3"
 secp256k1 = "0.24.0"
+rand_xorshift = "0.3"

@@ -72,9 +72,10 @@ pub(crate) struct ExecutionChip<F: Field>{
     marker: PhantomData<F>,
 }
 
+#[derive(Debug, Clone)]
 pub(crate) struct ExecutionChipAssignedCells<F: Field> {
-    script_length: AssignedCell<F, F>,
-    script_rlc_acc_init: AssignedCell<F, F>,
+    pub(crate) script_length: AssignedCell<F, F>,
+    pub(crate) script_rlc_acc_init: AssignedCell<F, F>,
     pub(crate) randomness: AssignedCell<F, F>,
     pub(crate) pk_rlc_acc: AssignedCell<F, F>,
     pub(crate) num_checksig_opcodes: AssignedCell<F, F>,

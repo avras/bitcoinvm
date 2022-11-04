@@ -1,8 +1,10 @@
+use std::marker::PhantomData;
 use crate::Field;
+use crate::bitcoinvm_circuit::execution::ExecutionChipAssignedCells;
 use crate::bitcoinvm_circuit::util::expr::Expr;
-use crate::bitcoinvm_circuit::util::is_zero::{IsZeroConfig, IsZeroChip};
+use crate::bitcoinvm_circuit::util::is_zero::{IsZeroConfig, IsZeroChip, IsZeroInstruction};
 use ecc::{EccConfig, GeneralEccChip};
-use ecdsa::ecdsa::{AssignedEcdsaSig, AssignedPublicKey};
+use ecdsa::ecdsa::{AssignedEcdsaSig, AssignedPublicKey, EcdsaChip};
 use halo2_proofs::poly::Rotation;
 use halo2_proofs::halo2curves::secp256k1::{Secp256k1Affine, Fq};
 use halo2_proofs::plonk::{Selector, Column, Advice, Expression, ConstraintSystem, Error};
@@ -13,7 +15,8 @@ use maingate::{MainGateConfig, RangeConfig, RangeChip, RangeInstructions, MainGa
 use crate::bitcoinvm_circuit::constants::*;
 use super::parity_table::{ParityTableConfig, ParityTableChip};
 use super::super::util::sign_util::SignData;
-use super::checksig_util::{range_check, pk_bytes_swap_endianness, rlc, ChipsRef, integer_to_bytes_le, copy_integer_bytes_le, AssignedPublicKeyRLC, AssignedPublicKeyBytes};
+use super::checksig_util::{range_check, pk_bytes_swap_endianness, rlc, ChipsRef, integer_to_bytes_le, copy_integer_bytes_le, AssignedPublicKeyBytes, ct_option_ok_or};
+use super::super::util::pk_parser::PublicKeyInScript;
 
 const PK_POW_RAND_SIZE: usize = 64;
 
@@ -22,7 +25,7 @@ const PK_POW_RAND_SIZE: usize = 64;
 pub(crate) struct OpCheckSigConfig<F: Field> {
     q_enable: Selector,
 
-    // Number of CHECKSIG opcodes found in scriptPubkey, that still need to be checked
+    // Number of CHECKSIG opcodes found in scriptPubkey; one signature required per public key
     num_checksig_opcodes: Column<Advice>,
     num_checksig_opcodes_inv: Column<Advice>,
     num_checksig_opcodes_is_zero: IsZeroConfig<F>,
@@ -50,27 +53,38 @@ pub(crate) struct OpCheckSigConfig<F: Field> {
     range_config: RangeConfig,
 }
 
+impl<F: Field> OpCheckSigConfig<F> {
+    pub(crate) fn load_range(&self, layouter: &mut impl Layouter<F>) -> Result<(), Error> {
+        let range_chip = RangeChip::<F>::new(self.range_config.clone());
+        range_chip.load_table(layouter)
+    }
+
+    pub(crate) fn ecc_chip_config(&self) -> EccConfig {
+        EccConfig::new(self.range_config.clone(), self.main_gate_config.clone())
+    }
+}
+
+
 /// Gadget to verify the OP_CHECKSIG opcode
 #[derive(Clone, Debug)]
 pub(crate) struct OpCheckSigChip<F: Field, const MAX_CHECKSIG_COUNT: usize> {
-    /// Configuration struct
-    pub config: OpCheckSigConfig<F>,
     /// Aux generator for EccChip
     pub aux_generator: Secp256k1Affine,
     /// Window size for EccChip
     pub window_size: usize,
+    /// Marker
+    pub _marker: PhantomData<F>,
 }
 
-impl<F: Field> OpCheckSigChip<F, MAX_CHECKSIG_COUNT> {
+impl<F: Field, const MAX_CHECKSIG_COUNT: usize> OpCheckSigChip<F, MAX_CHECKSIG_COUNT> {
     pub fn construct(
-        config: OpCheckSigConfig<F>,
         aux_generator: Secp256k1Affine,
         window_size: usize,
     ) -> Self {
         Self {
-            config,
             aux_generator,
             window_size,
+            _marker: PhantomData,
         }
     }
 
@@ -198,7 +212,7 @@ impl<F: Field> OpCheckSigChip<F, MAX_CHECKSIG_COUNT> {
                 .cloned()
                 .collect::<Vec<Expression<F>>>()
                 .try_into()
-                .expect("vector to array of size 63");
+                .expect("vector to array of size 64");
 
             let pk_be = pk_bytes_swap_endianness(&pk_le);
             let mut prefixed_pk_be = pk_be.to_vec();
@@ -239,18 +253,6 @@ impl<F: Field> OpCheckSigChip<F, MAX_CHECKSIG_COUNT> {
         }
     }
     
-    pub(crate) fn load_range(&self, layouter: &mut impl Layouter<F>) -> Result<(), Error> {
-        let range_chip = RangeChip::<F>::new(self.config.range_config.clone());
-        range_chip.load_table(layouter)
-    }
-
-    pub(crate) fn ecc_chip_config(&self) -> EccConfig {
-        EccConfig::new(self.config.range_config.clone(), self.config.main_gate_config.clone())
-    }
-
-}
-
-impl<F: Field, const MAX_CHECKSIG_COUNT: usize> OpCheckSigChip<F, MAX_CHECKSIG_COUNT> {
     fn assign_aux(
         &self,
         ctx: &mut RegionCtx<'_, F>,
@@ -283,8 +285,8 @@ impl<F: Field, const MAX_CHECKSIG_COUNT: usize> OpCheckSigChip<F, MAX_CHECKSIG_C
 
         let integer_r = ecc_chip.new_unassigned_scalar(Value::known(*sig_r));
         let integer_s = ecc_chip.new_unassigned_scalar(Value::known(*sig_s));
-        // Message hash is always the field element 1 since we only need to prove ownership, not spend
-        let msg_hash = ecc_chip.new_unassigned_scalar(Value::known(Fq::one()));
+        // Message hash is always a fixed field element since we only need to prove ownership, not spend
+        let msg_hash = ecc_chip.new_unassigned_scalar(Value::known(Fq::from(ECDSA_MESSAGE_HASH as u64)));
 
         let r_assigned = scalar_chip.assign_integer(ctx, integer_r, Range::Remainder)?;
         let s_assigned = scalar_chip.assign_integer(ctx, integer_s, Range::Remainder)?;
@@ -317,50 +319,423 @@ impl<F: Field, const MAX_CHECKSIG_COUNT: usize> OpCheckSigChip<F, MAX_CHECKSIG_C
             pk_y_le,
         })
     }
-/* 
 
-    #[allow(clippy::too_many_arguments)]
-    fn assign_opchecksig(
+
+    pub(crate) fn assign(
         &self,
         config: &OpCheckSigConfig<F>,
-        region: &mut Region<'_, F>,
-        offset: usize,
+        layouter: &mut impl Layouter<F>,
+        execution_cells: &ExecutionChipAssignedCells<F>,
         randomness: F,
-        sign_data: Option<&SignData>,
-        assigned_pk_bytes: &AssignedPublicKeyBytes<F>,
-    ) -> Result<AssignedPublicKeyRLC<F>, Error> {
-        let (padding, sign_data) = match sign_data {
-            Some(sign_data) => (false, sign_data.clone()),
-            None => (true, SignData::default()),
+        signatures: &[SignData],
+        collected_pks: &[PublicKeyInScript],
+    ) -> Result<(), Error> {
+        if signatures.len() > MAX_CHECKSIG_COUNT || signatures.len() != collected_pks.len() {
+            return Err(Error::Synthesis);
+        }
+
+        for i in 0..signatures.len() {
+            // The two vectors should have the same public keys
+            if signatures[i].pk != collected_pks[i].pk {
+                return Err(Error::Synthesis);
+            }
+        }
+
+        let main_gate = MainGate::new(config.main_gate_config.clone());
+        let range_chip = RangeChip::new(config.range_config.clone());
+        let mut ecc_chip = GeneralEccChip::<Secp256k1Affine, F, NUMBER_OF_LIMBS, BIT_LEN_LIMB>::new(
+            config.ecc_chip_config(),
+        );
+        let cloned_ecc_chip = ecc_chip.clone();
+        let scalar_chip = cloned_ecc_chip.scalar_field_chip();
+
+        layouter.assign_region(
+            || "ecc chip aux",
+            |region| self.assign_aux(&mut RegionCtx::new(region, 0), &mut ecc_chip),
+        )?;
+
+        let ecdsa_chip = EcdsaChip::new(ecc_chip.clone());
+
+        let mut assigned_pks = Vec::new();
+
+        let chips = ChipsRef {
+            main_gate: &main_gate,
+            range_chip: &range_chip,
+            ecc_chip: &ecc_chip,
+            scalar_chip,
+            ecdsa_chip: &ecdsa_chip,
         };
-        let SignData {
-            signature: _,
-            pk,
-        } = sign_data;
 
-        // Copy constraints between pub_key and msg_hash
-        // bytes of this chip and the ECDSA chip
-        copy_integer_bytes_le(
-            region,
-            "pk_x",
-            &assigned_pk_bytes.pk_x_le,
-            &config.pk[0],
-            offset,
+        layouter.assign_region(
+            || "ecdsa chip verification",
+            |region| {
+                assigned_pks.clear();
+                let offset = &mut 0;
+                let mut ctx = RegionCtx::new(region, *offset);
+                for i in 0..MAX_CHECKSIG_COUNT {
+                    let signature = if i < signatures.len() {
+                        signatures[i].clone()
+                    } else {
+                        // padding (enabled when number of OP_CHECKSIG opcodes is less than max number)
+                        SignData::default()
+                    };
+                    let assigned_pk = self.assign_ecdsa(&mut ctx, &chips, &signature)?;
+                    assigned_pks.push(assigned_pk);
+                }
+                Ok(())
+            },
         )?;
-        copy_integer_bytes_le(
-            region,
-            "pk_y",
-            &assigned_pk_bytes.pk_y_le,
-            &config.pk[1],
-            offset,
+
+
+        ParityTableChip::load(config.parity_table.clone(), layouter)?;
+        
+        let mut pk_rlc_acc: F = F::zero();
+        for i in 0..collected_pks.len() {
+            for b in collected_pks[i].clone().bytes {
+                pk_rlc_acc = F::from(b as u64) + randomness * pk_rlc_acc;
+            }
+        }
+
+        layouter.assign_region(
+            || "OP_CHECKSIG public key collection verification",
+            |mut region: Region<F>| {
+                let num_checksig_opcodes_is_zero_chip
+                    = IsZeroChip::construct(config.num_checksig_opcodes_is_zero.clone());
+
+                // an extra row is assigned as queries are made to next rows
+                for offset in 0..MAX_CHECKSIG_COUNT+1 {
+
+                    if offset < MAX_CHECKSIG_COUNT {
+                        // Enable selector in MAX_CHECKSIG_COUNT rows
+                        config.q_enable.enable(&mut region, offset)?;
+
+                        let mut power = randomness;
+                        for i in 0..PK_POW_RAND_SIZE {
+                            let rcell = region.assign_advice(
+                                || "Assign (i+1)th power of randomness",
+                                config.powers_of_randomness[i],
+                                offset,
+                                || Value::known(power),
+                            )?;
+                            // The value in the first row and first power_of_randomness array is constrained
+                            // to be equal to the randomness value used in the ExecutionChip
+                            if offset == 0 && i == 0 {
+                                region.constrain_equal(rcell.cell(), execution_cells.randomness.cell())?;
+                            }
+                            power = power * randomness;
+                        }
+                    }
+                    else {
+                        // The randomness value is queried in the extra row
+                        region.assign_advice(
+                            || "Assign first power of randomness in extra row",
+                            config.powers_of_randomness[0],
+                            offset,
+                            || Value::known(randomness),
+                        )?;
+
+                        // The pk_rlc_acc value is queried in the extra row
+                        region.assign_advice(
+                            || "Assign pk_rlc_acc in extra row",
+                            config.pk_rlc_acc,
+                            offset,
+                            || Value::known(F::zero()),
+                        )?;
+                    }
+                    
+                    if offset < assigned_pks.len() {
+                        let num_checksig_opcodes_remaining = F::from((assigned_pks.len() - offset) as u64);
+                        let num_cs_cell = region.assign_advice(
+                            || "Number of OP_CHECKSIG operations",
+                            config.num_checksig_opcodes,
+                            offset,
+                            || Value::known(num_checksig_opcodes_remaining),
+                        )?;
+
+                        // The value in the first row of the num_checksig_opcodes column is constrained
+                        // to be equal to the num_checksig_opcodes value calculated in the ExecutionChip
+                        if offset == 0 {
+                            region.constrain_equal(num_cs_cell.cell(), execution_cells.num_checksig_opcodes.cell())?;
+                        }
+
+                        num_checksig_opcodes_is_zero_chip.assign(
+                            &mut region,
+                            offset,
+                            Value::known(num_checksig_opcodes_remaining),
+                        )?;
+                       
+                        // Assign public key bytes
+                        copy_integer_bytes_le(
+                            &mut region,
+                            "pk_x",
+                            &assigned_pks[offset].pk_x_le,
+                            &config.pk[0],
+                            offset,
+                        )?;
+                        copy_integer_bytes_le(
+                            &mut region,
+                            "pk_y",
+                            &assigned_pks[offset].pk_y_le,
+                            &config.pk[1],
+                            offset,
+                        )?;
+
+                        region.assign_advice(
+                            || "Public key prefix byte",
+                            config.pk_prefix,
+                            offset,
+                            || Value::known(F::from(collected_pks[offset].bytes[0] as u64)),
+                        )?;
+
+                        let mut pk_rlc = F::zero();
+                        for b in collected_pks[offset].clone().bytes {
+                            pk_rlc = F::from(b as u64) + randomness * pk_rlc;
+                        }
+
+                        region.assign_advice(
+                            || "Public key RLC accumulator",
+                            config.pk_rlc,
+                            offset,
+                            || Value::known(pk_rlc),
+                        )?;
+                        
+                        let acc_cell = region.assign_advice(
+                            || "Public key RLC accumulator",
+                            config.pk_rlc_acc,
+                            offset,
+                            || Value::known(pk_rlc_acc),
+                        )?;
+
+                        // The value in the first row of the pk_rlc_acc column is constrained
+                        // to be equal to the pk_rlc_acc value calculated in the ExecutionChip
+                        if offset == 0 {
+                            region.constrain_equal(acc_cell.cell(), execution_cells.pk_rlc_acc.cell())?;
+                        }
+                        
+                        let randomness_inv = ct_option_ok_or(randomness.invert(), Error::Synthesis).unwrap();
+                        // Update the value of pk_rlc_acc
+                        pk_rlc_acc = randomness_inv * (pk_rlc_acc - pk_rlc);
+                    }
+                    else {
+                        region.assign_advice(
+                            || "Number of OP_CHECKSIG operations",
+                            config.num_checksig_opcodes,
+                            offset,
+                            || Value::known(F::zero()),
+                        )?;
+
+                        num_checksig_opcodes_is_zero_chip.assign(
+                            &mut region,
+                            offset,
+                            Value::known(F::zero()),
+                        )?;
+
+                        region.assign_advice(
+                            || "Public key RLC accumulator",
+                            config.pk_rlc_acc,
+                            offset,
+                            || Value::known(pk_rlc_acc),
+                        )?;
+                        
+                    }
+                }
+                Ok(())
+            },
         )?;
-
-        config.q_enable.enable(region, offset)?;
-
-
-        Ok(
-            AssignedPublicKeyRLC { pk_rlc: unimplemented!() } 
-        )
+        Ok(())
     }
- */
+
+}
+
+#[cfg(test)]
+mod tests {
+    use halo2_proofs::arithmetic::Field as HaloField;
+    use halo2_proofs::dev::MockProver;
+    use halo2_proofs::halo2curves::CurveAffine;
+    use halo2_proofs::halo2curves::bn256::Fr as BnScalar;
+    use halo2_proofs::circuit::{SimpleFloorPlanner, Layouter};
+    use halo2_proofs::halo2curves::{secp256k1::{Secp256k1Affine, Fq, Fp}};
+    use halo2_proofs::plonk::{Circuit, ConstraintSystem, Error};
+    use rand::{Rng, SeedableRng};
+    use rand_xorshift::XorShiftRng;
+    use secp256k1::{self, Secp256k1, SecretKey, PublicKey};
+    use secp256k1::constants::PUBLIC_KEY_SIZE;
+
+    use crate::bitcoinvm_circuit::constants::*;
+    use crate::bitcoinvm_circuit::crypto_opcodes::checksig::checksig_util::{ct_option_ok_or, pk_bytes_swap_endianness};
+    use crate::bitcoinvm_circuit::crypto_opcodes::util::pk_parser::{PublicKeyInScript, collect_public_keys, StackElement};
+    use crate::bitcoinvm_circuit::crypto_opcodes::util::sign_util::{SignData, sign};
+    use crate::bitcoinvm_circuit::execution::{ExecutionChip, ExecutionConfig};
+    use super::{OpCheckSigChip, OpCheckSigConfig};
+    use crate::Field;
+
+    #[derive(Clone, Debug)]
+    struct TestOpChecksigCircuitConfig<F: Field, const MAX_CHECKSIG_COUNT: usize> {
+        execution_config: ExecutionConfig<F>,
+        op_checksig_config: OpCheckSigConfig<F>,
+    }
+
+    struct TestOpChecksigCircuit<F: Field, const MAX_CHECKSIG_COUNT: usize> {
+        pub op_checksig_chip: OpCheckSigChip<F, MAX_CHECKSIG_COUNT>,
+        pub script_pubkey: Vec<u8>,
+        pub randomness: F,
+        pub initial_stack: [F; MAX_STACK_DEPTH],
+        pub signatures: Vec<SignData>,
+        pub collected_pks: Vec<PublicKeyInScript>,
+    }
+
+    impl<F: Field, const MAX_CHECKSIG_COUNT: usize> Circuit<F> for TestOpChecksigCircuit<F, MAX_CHECKSIG_COUNT> {
+        type Config = TestOpChecksigCircuitConfig<F, MAX_CHECKSIG_COUNT>;
+        type FloorPlanner = SimpleFloorPlanner;
+
+        fn without_witnesses(&self) -> Self {
+            Self {
+                op_checksig_chip: OpCheckSigChip::<F, MAX_CHECKSIG_COUNT> {
+                    aux_generator: Secp256k1Affine::default(),
+                    window_size: 0,
+                    _marker: std::marker::PhantomData::default()
+                },
+                script_pubkey: vec![],
+                randomness: F::one(),
+                initial_stack: [F::zero(); MAX_STACK_DEPTH],
+                signatures: vec![],
+                collected_pks: vec![],
+            }
+        }
+
+        fn configure(meta: &mut ConstraintSystem<F>) -> Self::Config {
+            TestOpChecksigCircuitConfig {
+                execution_config: ExecutionChip::<F>::configure(meta),
+                op_checksig_config: OpCheckSigChip::<F, MAX_CHECKSIG_COUNT>::configure(meta),
+            }
+        }
+
+        fn synthesize(
+            &self,
+            config: Self::Config,
+            mut layouter: impl Layouter<F>
+        ) -> Result<(), Error> {
+            let exec_chip = ExecutionChip::construct();
+
+            let execution_chip_cells  = exec_chip.assign_script_pubkey_unroll(
+                config.execution_config.clone(),
+                &mut layouter,
+                self.script_pubkey.clone(),
+                self.randomness,
+                self.initial_stack,
+            )?;
+            
+            exec_chip.expose_public(
+                config.execution_config.clone(),
+                layouter.namespace(|| "script_length"),
+                execution_chip_cells.clone().script_length,
+                 0
+            )?;
+            exec_chip.expose_public(
+                config.execution_config.clone(),
+                layouter.namespace(|| "script_rlc_acc"),
+                execution_chip_cells.clone().script_rlc_acc_init,
+                1
+            )?;
+            exec_chip.expose_public(
+                config.execution_config.clone(),
+                layouter.namespace(|| "randomness"),
+                execution_chip_cells.clone().randomness,
+                2
+            )?;
+
+            let checksig_chip: OpCheckSigChip<F, MAX_CHECKSIG_COUNT> = self.op_checksig_chip.clone();
+            checksig_chip.assign(
+                &config.op_checksig_config,
+                &mut layouter,
+                &execution_chip_cells,
+                self.randomness,
+                &self.signatures,
+                &self.collected_pks,
+            )?;
+            Ok(())
+        }
+    }
+
+
+    #[test]
+    fn test_opchecksig() {
+        let k = 19;
+
+        let secp = Secp256k1::new();
+        let secret_key = SecretKey::from_slice(&[0xcd; 32]).expect("32 bytes, within curve order");
+        let public_key = PublicKey::from_secret_key(&secp, &secret_key);
+        let public_key_bytes: [u8; PUBLIC_KEY_SIZE] = public_key.serialize();
+        
+        let mut script_pubkey: Vec<u8> = vec![];
+        script_pubkey.push(PUBLIC_KEY_SIZE as u8); // "Push 33 bytes" opcode
+        script_pubkey.extend(public_key_bytes.iter());
+        script_pubkey.push(OP_CHECKSIG as u8);
+
+        let mut rng = XorShiftRng::seed_from_u64(1);
+        let mut initial_stack_vec = vec![BnScalar::one()]; // This value will force a signature verification later
+        initial_stack_vec.extend_from_slice(&[BnScalar::zero(); MAX_STACK_DEPTH-1]);
+        let initial_stack: [BnScalar; MAX_STACK_DEPTH] = initial_stack_vec.as_slice().try_into().unwrap();
+        
+        // TODO: Derive initial stack and pk_parser_initial_stack from the same value
+        let pk_parser_initial_stack = vec![StackElement::ValidSignature];
+        let collected_pks = collect_public_keys(script_pubkey.clone(), pk_parser_initial_stack).expect("PK collection failed");
+
+        let aux_generator = Secp256k1Affine::random(&mut rng);
+        let sig_randomness = Fq::random(&mut rng);
+        let mut sk_bytes = secret_key.secret_bytes();
+        sk_bytes.reverse();
+        let sk = ct_option_ok_or(
+            Fq::from_bytes(&sk_bytes), libsecp256k1::Error::InvalidSecretKey
+        ).unwrap();
+        let sig = sign(sig_randomness, sk, Fq::from(ECDSA_MESSAGE_HASH as u64));
+
+        let pk_be = public_key.serialize_uncompressed();
+        let pk_le = pk_bytes_swap_endianness(&pk_be[1..]);
+        let x = ct_option_ok_or(
+            Fp::from_bytes(pk_le[..32].try_into().unwrap()),
+            libsecp256k1::Error::InvalidPublicKey,
+        ).expect("x coordinate corrupted");
+        let y = ct_option_ok_or(
+            Fp::from_bytes(pk_le[32..].try_into().unwrap()),
+            libsecp256k1::Error::InvalidPublicKey,
+        ).expect("y coordinate corrupted");
+        let pk = ct_option_ok_or(
+            Secp256k1Affine::from_xy(x, y),
+            libsecp256k1::Error::InvalidPublicKey,
+        ).expect("Public key corrupted");
+        
+        let sign_data: SignData = SignData { signature: sig, pk };
+        
+
+        let r: u64 = rng.gen();
+        let randomness: BnScalar = BnScalar::from(r);
+
+        let circuit = TestOpChecksigCircuit::<BnScalar, MAX_CHECKSIG_COUNT> {
+            op_checksig_chip: OpCheckSigChip::<BnScalar, MAX_CHECKSIG_COUNT> {
+                aux_generator,
+                window_size: 2,
+                _marker: std::marker::PhantomData,
+            },
+            script_pubkey: script_pubkey.clone(),
+            randomness,
+            initial_stack,
+            signatures: vec![sign_data],
+            collected_pks,
+        };
+
+        script_pubkey.reverse();
+        let script_rlc_init = script_pubkey.clone().into_iter().fold(BnScalar::zero(), |acc, v| {
+            acc * randomness + BnScalar::from(v as u64)
+        });
+
+        let public_input = vec![
+            BnScalar::from(script_pubkey.len() as u64),
+            script_rlc_init,
+            randomness,
+        ];
+
+        let prover = MockProver::run(k, &circuit, vec![public_input.clone()]).unwrap();
+        prover.assert_satisfied();
+    }
 }

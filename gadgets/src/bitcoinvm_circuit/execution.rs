@@ -1,3 +1,5 @@
+use std::marker::PhantomData;
+
 use halo2_proofs::circuit::{Layouter, Region, Value, AssignedCell};
 use halo2_proofs::plonk::{Column, Advice, Selector, ConstraintSystem, Expression, Error, Instance};
 use halo2_proofs::poly::Rotation;
@@ -66,22 +68,22 @@ pub(crate) struct ExecutionConfig<F: Field> {
 
 
 #[derive(Debug, Clone)]
-struct ExecutionChip<F: Field> {
-    config: ExecutionConfig<F>,
+pub(crate) struct ExecutionChip<F: Field>{
+    marker: PhantomData<F>,
 }
-struct ExecutionChipAssignedCells<F: Field> {
+
+pub(crate) struct ExecutionChipAssignedCells<F: Field> {
     script_length: AssignedCell<F, F>,
     script_rlc_acc_init: AssignedCell<F, F>,
-    randomness: AssignedCell<F, F>,
-    pk_rlc_acc: AssignedCell<F, F>,
-    num_checksig_opcodes: AssignedCell<F, F>,
+    pub(crate) randomness: AssignedCell<F, F>,
+    pub(crate) pk_rlc_acc: AssignedCell<F, F>,
+    pub(crate) num_checksig_opcodes: AssignedCell<F, F>,
 }
 
 impl<F: Field> ExecutionChip<F> {
-    pub fn construct(config: ExecutionConfig<F>) -> Self {
-        Self {
-            config,
-        }
+
+    pub(crate) fn construct() -> Self {
+        Self { marker: PhantomData }
     }
 
     pub(crate) fn configure(
@@ -610,6 +612,7 @@ impl<F: Field> ExecutionChip<F> {
 
     pub(crate) fn assign_script_pubkey_unroll(
         &self,
+        config: ExecutionConfig<F>,
         layouter: &mut impl Layouter<F>,
         script_pubkey: Vec<u8>,
         randomness: F,
@@ -617,19 +620,19 @@ impl<F: Field> ExecutionChip<F> {
     ) -> Result<ExecutionChipAssignedCells<F>, Error> {
         assert!(script_pubkey.len() <= MAX_SCRIPT_PUBKEY_SIZE);
 
-        OpcodeTableChip::load(self.config.opcode_table.clone(), layouter)?;
+        OpcodeTableChip::load(config.opcode_table.clone(), layouter)?;
 
         layouter.assign_region(
             || "ScriptPubkey unrolling",
             |mut region: Region<F>| {
 
-                self.config.q_first.enable(&mut region, 0)?;
+                config.q_first.enable(&mut region, 0)?;
 
                 macro_rules! assign_first_row {
                     ($annotation:expr, $column:ident, $val:expr) => {
                         region.assign_advice(
                             || $annotation,
-                            self.config.$column,
+                            config.$column,
                             0,
                             || Value::known($val),
                         )?
@@ -637,7 +640,7 @@ impl<F: Field> ExecutionChip<F> {
                     ($annotation:expr, $column:ident) => {
                         region.assign_advice(
                             || $annotation,
-                            self.config.$column,
+                            config.$column,
                             0,
                             || Value::known(F::zero()),
                         )?
@@ -656,7 +659,7 @@ impl<F: Field> ExecutionChip<F> {
                 for i in 0..MAX_STACK_DEPTH {
                     region.assign_advice(
                         || "Initialize stack to zero elements",
-                        self.config.stack[i],
+                        config.stack[i],
                         0,
                         || Value::known(initial_stack[i]),
                     )?;
@@ -686,15 +689,15 @@ impl<F: Field> ExecutionChip<F> {
                     assign_first_row!("Initialize script_rlc_acc", script_rlc_acc, script_rlc_acc_vec[0]);
 
                 let num_script_bytes_remaining_is_zero_chip
-                    = IsZeroChip::construct(self.config.num_script_bytes_remaining_is_zero.clone());
+                    = IsZeroChip::construct(config.num_script_bytes_remaining_is_zero.clone());
                 let is_stack_top_false_chip
-                    = IsZeroChip::construct(self.config.is_stack_top_false.clone());
+                    = IsZeroChip::construct(config.is_stack_top_false.clone());
                 let num_data_bytes_remaining_is_zero_chip
-                    = IsZeroChip::construct(self.config.num_data_bytes_remaining_is_zero.clone());
+                    = IsZeroChip::construct(config.num_data_bytes_remaining_is_zero.clone());
                 let num_data_length_bytes_remaining_is_zero_chip
-                    = IsZeroChip::construct(self.config.num_data_length_bytes_remaining_is_zero.clone());
+                    = IsZeroChip::construct(config.num_data_length_bytes_remaining_is_zero.clone());
                 let num_data_length_bytes_remaining_is_one_chip
-                    = IsZeroChip::construct(self.config.num_data_length_bytes_remaining_is_one.clone());
+                    = IsZeroChip::construct(config.num_data_length_bytes_remaining_is_one.clone());
 
                 let mut script_state = ScriptPubkeyParseState::new(randomness, initial_stack);
                 
@@ -703,12 +706,12 @@ impl<F: Field> ExecutionChip<F> {
                     let offset = byte_index + 1;
                     
                     if byte_index != MAX_SCRIPT_PUBKEY_SIZE {
-                        self.config.q_execution.enable(&mut region, offset)?;
+                        config.q_execution.enable(&mut region, offset)?;
                     }
 
                     region.assign_advice(
                         || "Randomness for RLC operations",
-                        self.config.randomness,
+                        config.randomness,
                         offset,
                         || Value::known(randomness),
                     )?;
@@ -716,14 +719,14 @@ impl<F: Field> ExecutionChip<F> {
                     if byte_index < script_pubkey.len() {
                         region.assign_advice(
                             || "Load scriptPubkey bytes",
-                            self.config.opcode,
+                            config.opcode,
                             offset,
                             || Value::known(F::from(script_pubkey[byte_index] as u64)),
                         )?;
 
                         region.assign_advice(
                             || "Load script_rlc_acc intermediate values",
-                            self.config.script_rlc_acc,
+                            config.script_rlc_acc,
                             offset,
                             || Value::known(script_rlc_acc_vec[offset]),
                         )?;
@@ -732,7 +735,7 @@ impl<F: Field> ExecutionChip<F> {
 
                         region.assign_advice(
                             || "Load num_script_bytes_remaining values",
-                            self.config.num_script_bytes_remaining,
+                            config.num_script_bytes_remaining,
                             offset,
                             || Value::known(num_script_bytes_remaining),
                         )?;
@@ -748,7 +751,7 @@ impl<F: Field> ExecutionChip<F> {
 
                         region.assign_advice(
                             || "Load num_data_bytes_remaining values",
-                            self.config.num_data_bytes_remaining,
+                            config.num_data_bytes_remaining,
                             offset,
                             || Value::known(F::from(script_state.num_data_bytes_remaining)),
                         )?;
@@ -761,7 +764,7 @@ impl<F: Field> ExecutionChip<F> {
 
                         region.assign_advice(
                             || "Load num_data_length_bytes_remaining values",
-                            self.config.num_data_length_bytes_remaining,
+                            config.num_data_length_bytes_remaining,
                             offset,
                             || Value::known(F::from(script_state.num_data_length_bytes_remaining)),
                         )?;
@@ -785,63 +788,63 @@ impl<F: Field> ExecutionChip<F> {
 
                         region.assign_advice(
                             || "Load num_data_length_acc_constant values",
-                            self.config.num_data_length_acc_constant,
+                            config.num_data_length_acc_constant,
                             offset,
                             || Value::known(F::from(script_state.num_data_length_acc_constant)),
                         )?;
 
                         region.assign_advice(
                             || "Load is_opcode_enabled column",
-                            self.config.is_opcode_enabled,
+                            config.is_opcode_enabled,
                             offset,
                             || Value::known(F::from(opcode_enabled(script_pubkey[byte_index]))),
                         )?;
 
                         region.assign_advice(
                             || "Load is_opcode_op0 column",
-                            self.config.is_opcode_op0,
+                            config.is_opcode_op0,
                             offset,
                             || Value::known(F::from(op0_indicator(script_pubkey[byte_index]))),
                         )?;
 
                         region.assign_advice(
                             || "Load is_opcode_op1_to_op16 column",
-                            self.config.is_opcode_op1_to_op16,
+                            config.is_opcode_op1_to_op16,
                             offset,
                             || Value::known(F::from(op1_to_op16_indicator(script_pubkey[byte_index]))),
                         )?;
 
                         region.assign_advice(
                             || "Load is_opcode_push1_to_push75 column",
-                            self.config.is_opcode_push1_to_push75,
+                            config.is_opcode_push1_to_push75,
                             offset,
                             || Value::known(F::from(push1_to_push75_indicator(script_pubkey[byte_index]))),
                         )?;
 
                         region.assign_advice(
                             || "Load is_opcode_pushdata1 column",
-                            self.config.is_opcode_pushdata1,
+                            config.is_opcode_pushdata1,
                             offset,
                             || Value::known(F::from(pushdata1_indicator(script_pubkey[byte_index]))),
                         )?;
 
                         region.assign_advice(
                             || "Load is_opcode_pushdata2 column",
-                            self.config.is_opcode_pushdata2,
+                            config.is_opcode_pushdata2,
                             offset,
                             || Value::known(F::from(pushdata2_indicator(script_pubkey[byte_index]))),
                         )?;
 
                         region.assign_advice(
                             || "Load is_opcode_pushdata4 column",
-                            self.config.is_opcode_pushdata4,
+                            config.is_opcode_pushdata4,
                             offset,
                             || Value::known(F::from(pushdata4_indicator(script_pubkey[byte_index]))),
                         )?;
 
                         region.assign_advice(
                             || "Load is_opcode_checksig column",
-                            self.config.is_opcode_checksig,
+                            config.is_opcode_checksig,
                             offset,
                             || Value::known(F::from(checksig_indicator(script_pubkey[byte_index]))),
                         )?;
@@ -852,14 +855,14 @@ impl<F: Field> ExecutionChip<F> {
                         if byte_index != MAX_SCRIPT_PUBKEY_SIZE {
                             region.assign_advice(
                                 || "Load scriptPubkey padding bytes",
-                                self.config.opcode,
+                                config.opcode,
                                 offset,
                                 || Value::known(F::from(OP_NOP as u64)),
                             )?;
 
                             region.assign_advice(
                                 || "Load is_opcode_enabled column",
-                                self.config.is_opcode_enabled,
+                                config.is_opcode_enabled,
                                 offset,
                                 || Value::known(F::one()),
                             )?;
@@ -867,14 +870,14 @@ impl<F: Field> ExecutionChip<F> {
                         else {
                             region.assign_advice(
                                 || "Load scriptPubkey padding bytes",
-                                self.config.opcode,
+                                config.opcode,
                                 offset,
                                 || Value::known(F::zero()),
                             )?;
 
                             region.assign_advice(
                                 || "Load is_opcode_enabled column",
-                                self.config.is_opcode_enabled,
+                                config.is_opcode_enabled,
                                 offset,
                                 || Value::known(F::zero()),
                             )?;
@@ -882,14 +885,14 @@ impl<F: Field> ExecutionChip<F> {
 
                         region.assign_advice(
                             || "Load script_rlc_acc padding",
-                            self.config.script_rlc_acc,
+                            config.script_rlc_acc,
                             offset,
                             || Value::known(F::zero()),
                         )?;
 
                         region.assign_advice(
                             || "Load num_script_bytes_remaining values",
-                            self.config.num_script_bytes_remaining,
+                            config.num_script_bytes_remaining,
                             offset,
                             || Value::known(F::zero()),
                         )?;
@@ -902,7 +905,7 @@ impl<F: Field> ExecutionChip<F> {
 
                         region.assign_advice(
                             || "Load num_data_bytes_remaining values",
-                            self.config.num_data_bytes_remaining,
+                            config.num_data_bytes_remaining,
                             offset,
                             || Value::known(F::zero()),
                         )?;
@@ -915,7 +918,7 @@ impl<F: Field> ExecutionChip<F> {
 
                         region.assign_advice(
                             || "Load num_data_length_bytes_remaining values",
-                            self.config.num_data_length_bytes_remaining,
+                            config.num_data_length_bytes_remaining,
                             offset,
                             || Value::known(F::zero()),
                         )?;
@@ -934,56 +937,56 @@ impl<F: Field> ExecutionChip<F> {
 
                         region.assign_advice(
                             || "Load num_data_length_acc_constant values",
-                            self.config.num_data_length_acc_constant,
+                            config.num_data_length_acc_constant,
                             offset,
                             || Value::known(F::from(script_state.num_data_length_acc_constant)),
                         )?;
 
                         region.assign_advice(
                             || "Load is_opcode_op0 column",
-                            self.config.is_opcode_op0,
+                            config.is_opcode_op0,
                             offset,
                             || Value::known(F::zero()),
                         )?;
 
                         region.assign_advice(
                             || "Load is_opcode_op1_to_op16 column",
-                            self.config.is_opcode_op1_to_op16,
+                            config.is_opcode_op1_to_op16,
                             offset,
                             || Value::known(F::zero()),
                         )?;
 
                         region.assign_advice(
                             || "Load is_opcode_push1_to_push75 column",
-                            self.config.is_opcode_push1_to_push75,
+                            config.is_opcode_push1_to_push75,
                             offset,
                             || Value::known(F::zero()),
                         )?;
 
                         region.assign_advice(
                             || "Load is_opcode_pushdata1 column",
-                            self.config.is_opcode_pushdata1,
+                            config.is_opcode_pushdata1,
                             offset,
                             || Value::known(F::zero()),
                         )?;
 
                         region.assign_advice(
                             || "Load is_opcode_pushdata2 column",
-                            self.config.is_opcode_pushdata2,
+                            config.is_opcode_pushdata2,
                             offset,
                             || Value::known(F::zero()),
                         )?;
 
                         region.assign_advice(
                             || "Load is_opcode_pushdata4 column",
-                            self.config.is_opcode_pushdata4,
+                            config.is_opcode_pushdata4,
                             offset,
                             || Value::known(F::zero()),
                         )?;
 
                         region.assign_advice(
                             || "Load is_opcode_checksig column",
-                            self.config.is_opcode_checksig,
+                            config.is_opcode_checksig,
                             offset,
                             || Value::known(F::zero()),
                         )?;
@@ -993,7 +996,7 @@ impl<F: Field> ExecutionChip<F> {
                     for i in 0..MAX_STACK_DEPTH {
                         region.assign_advice(
                             || "Load stack values",
-                            self.config.stack[i],
+                            config.stack[i],
                             offset,
                             || Value::known(script_state.stack[i]),
                         )?;
@@ -1001,14 +1004,14 @@ impl<F: Field> ExecutionChip<F> {
 
                     pk_rlc_acc_cell = region.assign_advice(
                         || "Load pk_rlc_acc column",
-                        self.config.pk_rlc_acc,
+                        config.pk_rlc_acc,
                         offset,
                         || Value::known(script_state.pk_rlc_acc),
                     )?;
 
                     num_checksig_opcodes_cell = region.assign_advice(
                         || "Load num_checksig_opcodes column",
-                        self.config.num_checksig_opcodes,
+                        config.num_checksig_opcodes,
                         offset,
                         || Value::known(F::from(script_state.num_checksig_opcodes)),
                     )?;
@@ -1033,11 +1036,12 @@ impl<F: Field> ExecutionChip<F> {
     
     pub fn expose_public(
         &self,
+        config: ExecutionConfig<F>,
         mut layouter: impl Layouter<F>,
         cell: AssignedCell<F, F>,
         row: usize,
     ) -> Result<(), Error> {
-        layouter.constrain_instance(cell.cell(), self.config.instance, row)
+        layouter.constrain_instance(cell.cell(), config.instance, row)
     }
 }
 
@@ -1053,18 +1057,17 @@ mod tests {
     use secp256k1::constants::PUBLIC_KEY_SIZE;
 
     use crate::bitcoinvm_circuit::constants::*;
-    use crate::bitcoinvm_circuit::execution::ExecutionConfig;
+    use crate::bitcoinvm_circuit::execution::{ExecutionChip, ExecutionConfig};
     use crate::Field;
 
-    use super::ExecutionChip;
 
-    struct MyCircuit<F: Field> {
+    struct TestExecutionCircuit<F: Field> {
         pub script_pubkey: Vec<u8>,
         pub randomness: F,
         pub initial_stack: [F; MAX_STACK_DEPTH],
     }
 
-    impl<F: Field> Circuit<F> for MyCircuit<F> {
+    impl<F: Field> Circuit<F> for TestExecutionCircuit<F> {
         type Config = ExecutionConfig<F>;
 
         type FloorPlanner = SimpleFloorPlanner;
@@ -1086,18 +1089,19 @@ mod tests {
             config: Self::Config,
             mut layouter: impl Layouter<F>
         ) -> Result<(), Error> {
-            let chip = ExecutionChip::construct(config);
+            let chip = ExecutionChip::construct();
 
             let chip_cells  = chip.assign_script_pubkey_unroll(
+                config.clone(),
                 &mut layouter,
                 self.script_pubkey.clone(),
                 self.randomness,
                 self.initial_stack,
             )?;
             
-            chip.expose_public(layouter.namespace(|| "script_length"), chip_cells.script_length, 0)?;
-            chip.expose_public(layouter.namespace(|| "script_rlc_acc"), chip_cells.script_rlc_acc_init, 1)?;
-            chip.expose_public(layouter.namespace(|| "randomness"), chip_cells.randomness, 2)?;
+            chip.expose_public(config.clone(), layouter.namespace(|| "script_length"), chip_cells.script_length, 0)?;
+            chip.expose_public(config.clone(), layouter.namespace(|| "script_rlc_acc"), chip_cells.script_rlc_acc_init, 1)?;
+            chip.expose_public(config, layouter.namespace(|| "randomness"), chip_cells.randomness, 2)?;
             Ok(())
         }
     }
@@ -1114,7 +1118,7 @@ mod tests {
         let r: u64 = rng.gen();
         let randomness: BnScalar = BnScalar::from(r);
         
-        let circuit = MyCircuit {
+        let circuit = TestExecutionCircuit {
             script_pubkey: script_pubkey.clone(),
             randomness,
             initial_stack: [BnScalar::zero(); MAX_STACK_DEPTH],
@@ -1150,7 +1154,7 @@ mod tests {
         let r: u64 = rng.gen();
         let randomness: BnScalar = BnScalar::from(r);
         
-        let circuit = MyCircuit {
+        let circuit = TestExecutionCircuit {
             script_pubkey: script_pubkey.clone(),
             randomness,
             initial_stack: [BnScalar::zero(); MAX_STACK_DEPTH],
@@ -1187,7 +1191,7 @@ mod tests {
         let r: u64 = rng.gen();
         let randomness: BnScalar = BnScalar::from(r);
         
-        let circuit = MyCircuit {
+        let circuit = TestExecutionCircuit {
             script_pubkey: script_pubkey.clone(),
             randomness,
             initial_stack: [BnScalar::zero(); MAX_STACK_DEPTH],
@@ -1229,7 +1233,7 @@ mod tests {
         let r: u64 = rng.gen();
         let randomness: BnScalar = BnScalar::from(r);
         
-        let circuit = MyCircuit {
+        let circuit = TestExecutionCircuit {
             script_pubkey: script_pubkey.clone(),
             randomness,
             initial_stack: [BnScalar::zero(); MAX_STACK_DEPTH],
@@ -1277,7 +1281,7 @@ mod tests {
         let r: u64 = rng.gen();
         let randomness: BnScalar = BnScalar::from(r);
         
-        let circuit = MyCircuit {
+        let circuit = TestExecutionCircuit {
             script_pubkey: script_pubkey.clone(),
             randomness,
             initial_stack: [BnScalar::zero(); MAX_STACK_DEPTH],
@@ -1318,11 +1322,11 @@ mod tests {
         let mut rng = rand::thread_rng();
         let r: u64 = rng.gen();
         let randomness: BnScalar = BnScalar::from(r);
-        let mut initial_stack_vec = vec![BnScalar::one()];
+        let mut initial_stack_vec = vec![BnScalar::one()]; // This value will force a signature verification later
         initial_stack_vec.extend_from_slice(&[BnScalar::zero(); MAX_STACK_DEPTH-1]);
         let initial_stack: [BnScalar; MAX_STACK_DEPTH] = initial_stack_vec.as_slice().try_into().unwrap();
 
-        let circuit = MyCircuit {
+        let circuit = TestExecutionCircuit {
             script_pubkey: script_pubkey.clone(),
             randomness,
             initial_stack,

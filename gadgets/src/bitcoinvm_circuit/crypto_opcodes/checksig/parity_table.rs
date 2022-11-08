@@ -1,4 +1,4 @@
-use halo2_proofs::plonk::{Column, Advice, TableColumn, ConstraintSystem, Error};
+use halo2_proofs::plonk::{Column, Advice, TableColumn, ConstraintSystem, Error, Selector};
 use halo2_proofs::{
     arithmetic::FieldExt,
     circuit::{Chip, Layouter, Value},
@@ -51,6 +51,7 @@ impl<F: FieldExt> Chip<F> for ParityTableChip<F> {
 impl<F: FieldExt> ParityTableChip<F> {
     pub(super) fn configure(
         meta: &mut ConstraintSystem<F>,
+        q_enable: Selector,
         input_pk_prefix: Column<Advice>,
         input_parity_byte: Column<Advice>,
     ) -> <Self as Chip<F>>::Config {
@@ -60,10 +61,11 @@ impl<F: FieldExt> ParityTableChip<F> {
         meta.lookup("Parity byte and pk prefix lookup", |meta| {
             let pk_prefix_cur = meta.query_advice(input_pk_prefix, Rotation::cur());
             let parity_byte_cur = meta.query_advice(input_parity_byte, Rotation::cur());
+            let q_enable = meta.query_selector(q_enable);
 
             vec![
-                (pk_prefix_cur, table_pk_prefix),
-                (parity_byte_cur, table_parity_byte),
+                (q_enable.clone() * pk_prefix_cur, table_pk_prefix),
+                (q_enable * parity_byte_cur, table_parity_byte),
             ]
         });
 
@@ -96,13 +98,15 @@ impl<F: FieldExt> ParityTableChip<F> {
                         || Value::known(F::from(index as u64)),
                     )?;
                 }
+
+                let initial_offset = 256usize;
                 // If parity byte is even, prefix is 0x02
                 for index in 0..256 {
                     if index % 2 == 0 {
                         table.assign_cell(
                             || "pk_prefix even y coordinate",
                             config.table.pk_prefix,
-                            index,
+                            initial_offset + index,
                             || Value::known(F::from(PREFIX_PK_COMPRESSED_EVEN_Y)),
                         )?;
                     }
@@ -110,17 +114,31 @@ impl<F: FieldExt> ParityTableChip<F> {
                         table.assign_cell(
                             || "pk_prefix odd y coordinate",
                             config.table.pk_prefix,
-                            index,
+                            initial_offset + index,
                             || Value::known(F::from(PREFIX_PK_COMPRESSED_ODD_Y)),
                         )?;
                     }
                     table.assign_cell(
                         || "parity byte",
                         config.table.parity_byte,
-                        index,
+                        initial_offset + index,
                         || Value::known(F::from(index as u64)),
                     )?;
                 }
+
+                table.assign_cell(
+                    || "pk_prefix default value when q_enable is disabled",
+                    config.table.pk_prefix,
+                    2*initial_offset,
+                    || Value::known(F::zero()),
+                )?;
+                table.assign_cell(
+                    || "parity byte default value when q_enable is disabled",
+                    config.table.parity_byte,
+                    2*initial_offset,
+                    || Value::known(F::zero()),
+                )?;
+                
 
                 Ok(())
             },

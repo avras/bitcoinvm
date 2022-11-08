@@ -1,6 +1,6 @@
 pub const MAX_SCRIPT_PUBKEY_SIZE : usize = 520;
 pub const MAX_STACK_DEPTH : usize = 33;
-pub const MAX_CHECKSIG_COUNT: usize = 5;
+pub const MAX_CHECKSIG_COUNT: usize = 1;
 
 // A stack element is evaluates to true if it consists of non-zero bytes,
 // except when the non-zero bytes encode a negative zero (0x80).

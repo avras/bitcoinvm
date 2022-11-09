@@ -446,8 +446,8 @@ impl<F: Field, const MAX_CHECKSIG_COUNT: usize> OpCheckSigChip<F, MAX_CHECKSIG_C
                         )?;
                     }
                     
-                    if offset < assigned_pks.len() {
-                        let num_checksig_opcodes_remaining = F::from((assigned_pks.len() - offset) as u64);
+                    if offset < collected_pks.len() {
+                        let num_checksig_opcodes_remaining = F::from((collected_pks.len() - offset) as u64);
                         let num_cs_cell = region.assign_advice(
                             || "Number of OP_CHECKSIG operations",
                             config.num_checksig_opcodes,
@@ -747,67 +747,28 @@ mod tests {
     fn plot_opchecksig() {
         use plotters::prelude::*;
         let k = 19;
+        const CHECKSIG_COUNT: usize = 3;
+        let num_collected_pks = 2;
 
-        let secp = Secp256k1::new();
-        let secret_key = SecretKey::from_slice(&[0xcd; 32]).expect("32 bytes, within curve order");
-        let public_key = PublicKey::from_secret_key(&secp, &secret_key);
-        let public_key_bytes: [u8; PUBLIC_KEY_SIZE] = public_key.serialize();
-        
-        let mut script_pubkey: Vec<u8> = vec![];
-        script_pubkey.push(PUBLIC_KEY_SIZE as u8); // "Push 33 bytes" opcode
-        script_pubkey.extend(public_key_bytes.iter());
-        script_pubkey.push(OP_CHECKSIG as u8);
+        let aux_generator = Secp256k1Affine::default();
+        let sig_default = SignData::default();
 
-        let mut rng = XorShiftRng::seed_from_u64(1);
-        let mut initial_stack_vec = vec![BnScalar::one()]; // This value will force a signature verification later
-        initial_stack_vec.extend_from_slice(&[BnScalar::zero(); MAX_STACK_DEPTH-1]);
-        let initial_stack: [BnScalar; MAX_STACK_DEPTH] = initial_stack_vec.as_slice().try_into().unwrap();
-        
-        // TODO: Derive initial stack and pk_parser_initial_stack from the same value
-        let pk_parser_initial_stack = vec![StackElement::ValidSignature];
-        let collected_pks = collect_public_keys(script_pubkey.clone(), pk_parser_initial_stack).expect("PK collection failed");
+        let coll_pk = PublicKeyInScript {
+            pk: sig_default.pk,
+            bytes: vec![1u8; 33], // placeholder value for plotting circuit layout
+        };
 
-        let aux_generator = Secp256k1Affine::random(&mut rng);
-        let sig_randomness = Fq::random(&mut rng);
-        let mut sk_bytes = secret_key.secret_bytes();
-        sk_bytes.reverse();
-        let sk = ct_option_ok_or(
-            Fq::from_bytes(&sk_bytes), libsecp256k1::Error::InvalidSecretKey
-        ).unwrap();
-        let sig = sign(sig_randomness, sk, Fq::from(ECDSA_MESSAGE_HASH as u64));
-
-        let pk_be = public_key.serialize_uncompressed();
-        let pk_le = pk_bytes_swap_endianness(&pk_be[1..]);
-        let x = ct_option_ok_or(
-            Fp::from_bytes(pk_le[..32].try_into().unwrap()),
-            libsecp256k1::Error::InvalidPublicKey,
-        ).expect("x coordinate corrupted");
-        let y = ct_option_ok_or(
-            Fp::from_bytes(pk_le[32..].try_into().unwrap()),
-            libsecp256k1::Error::InvalidPublicKey,
-        ).expect("y coordinate corrupted");
-        let pk = ct_option_ok_or(
-            Secp256k1Affine::from_xy(x, y),
-            libsecp256k1::Error::InvalidPublicKey,
-        ).expect("Public key corrupted");
-        
-        let sign_data: SignData = SignData { signature: sig, pk };
-        
-
-        let r: u64 = rng.gen();
-        let randomness: BnScalar = BnScalar::from(r);
-
-        let circuit = TestOpChecksigCircuit::<BnScalar, MAX_CHECKSIG_COUNT> {
-            op_checksig_chip: OpCheckSigChip::<BnScalar, MAX_CHECKSIG_COUNT> {
+        let circuit = TestOpChecksigCircuit::<BnScalar, CHECKSIG_COUNT> {
+            op_checksig_chip: OpCheckSigChip::<BnScalar, CHECKSIG_COUNT> {
                 aux_generator,
                 window_size: 2,
                 _marker: std::marker::PhantomData,
             },
-            script_pubkey: script_pubkey.clone(),
-            randomness,
-            initial_stack,
-            signatures: vec![sign_data],
-            collected_pks,
+            script_pubkey: vec![1u8; 35], // placeholder value for plotting circuit layout
+            randomness: BnScalar::one(),
+            initial_stack: [BnScalar::one(); MAX_STACK_DEPTH],
+            signatures: vec![SignData::default(); num_collected_pks],
+            collected_pks: vec![coll_pk; num_collected_pks],
         };
 
         let root = BitMapBackend::new("opchecksig-layout.png", (1024, 3096)).into_drawing_area();

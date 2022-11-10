@@ -393,18 +393,18 @@ impl<F: Field, const MAX_CHECKSIG_COUNT: usize> OpCheckSigChip<F, MAX_CHECKSIG_C
 
         ParityTableChip::load(config.parity_table.clone(), layouter)?;
         
-        let mut pk_rlc_acc: F = F::zero();
-        for i in 0..collected_pks.len() {
-            for b in collected_pks[i].clone().bytes {
-                pk_rlc_acc = F::from(b as u64) + randomness * pk_rlc_acc;
-            }
-        }
-
         layouter.assign_region(
             || "OP_CHECKSIG public key collection verification",
             |mut region: Region<F>| {
                 let num_checksig_opcodes_is_zero_chip
                     = IsZeroChip::construct(config.num_checksig_opcodes_is_zero.clone());
+
+                let mut pk_rlc_acc: F = F::zero();
+                for i in 0..collected_pks.len() {
+                    for b in collected_pks[i].clone().bytes {
+                        pk_rlc_acc = F::from(b as u64) + randomness * pk_rlc_acc;
+                    }
+                }
 
                 // an extra row is assigned as queries are made to next rows
                 for offset in 0..MAX_CHECKSIG_COUNT+1 {

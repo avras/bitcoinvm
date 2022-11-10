@@ -217,6 +217,7 @@ impl<F: Field, const MAX_CHECKSIG_COUNT: usize> OpCheckSigChip<F, MAX_CHECKSIG_C
             let pk_be = pk_bytes_swap_endianness(&pk_le);
             let mut prefixed_pk_be = pk_be.to_vec();
             prefixed_pk_be.insert(0, pk_prefix.clone());
+            prefixed_pk_be.reverse();
             let prefixed_pk_be_slice = prefixed_pk_be.as_slice();
             let uncompressed_pk_rlc = rlc::expr(prefixed_pk_be_slice, &powers_of_randomness);
 
@@ -226,7 +227,7 @@ impl<F: Field, const MAX_CHECKSIG_COUNT: usize> OpCheckSigChip<F, MAX_CHECKSIG_C
                 * (pk_prefix.clone() - Expression::Constant(F::from(PREFIX_PK_COMPRESSED_ODD_Y)));
 
             // Only the prefix byte and x coordinate are considered
-            let compressed_pk_rlc = rlc::expr(&prefixed_pk_be_slice[..33], &powers_of_randomness);
+            let compressed_pk_rlc = rlc::expr(&prefixed_pk_be_slice[32..], &powers_of_randomness);
             // The gate expression is non-zero when prefix byte is 0x02 or 0x03
             let compressed_pk_gate = pk_prefix - Expression::Constant(F::from(PREFIX_PK_UNCOMPRESSED));
 

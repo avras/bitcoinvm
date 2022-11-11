@@ -712,6 +712,9 @@ mod tests {
         ]
     }
 
+    // High memory usage test.  Run in serial with:
+    // `cargo test opchecksig -- --ignored --test-threads 1`
+    #[ignore]
     #[test]
     fn test_opchecksig_compressed_p2pk() {
         let k = 19;
@@ -760,6 +763,9 @@ mod tests {
         prover.assert_satisfied();
     }
 
+    // High memory usage test.  Run in serial with:
+    // `cargo test opchecksig -- --ignored --test-threads 1`
+    #[ignore]
     #[test]
     fn test_opchecksig_uncompressed_p2pk() {
         let k = 19;

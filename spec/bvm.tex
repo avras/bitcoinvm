@@ -18,7 +18,7 @@
 \begin{document}
 \maketitle
 \begin{abstract}
-  A BitcoinVM is a circuit which maintains the set of all Bitcoin UTXOs in a sparse Merkle tree (SMT). Each new Bitcoin block will be used to update the SMT using a validity proof. The SMT can be used to generate privacy-preserving proofs of ownership of a certain amount of bitcoins. Such proofs will enable privacy-preserving proofs of solvency of cryptocurrency exchanges.
+  A BitcoinVM is a circuit which maintains the set of all Bitcoin UTXOs in a sparse Merkle tree (SMT). Each new Bitcoin block will be used to update the SMT using a validity proof. The SMT can be used to generate privacy-preserving proofs of ownership of a certain amount of bitcoins. Such proofs will enable privacy-preserving proofs of reserves of cryptocurrency exchanges.
 \end{abstract}
   
 \section{Motivation}%
@@ -29,34 +29,66 @@ A shortcoming of the Provisions protocol was that it could only include bitcoins
 
 Multisig addresses offer better security and flexibility by requiring signatures from any $m$ out of $n$ public keys to spend a UTXO. Multisig addresses require all $n$ keys to be explicitly specified in a UTXO, thereby increasing the transaction cost of sending bitcoins to a multisig address.\footnote{Bitcoin transaction fees is proportional to the length of the transaction.} P2SH addresses solve this issue by requiring that only a 20 byte hash (SHA256 + RIPEMD160) of a multisig address be specified to receive funds into it.
 
-To the best of our knowledge, there is no publicly verifiable privacy-preserving proof of reserves protocol for Bitcoin that supports all the address types. The Kraken exchange uses a third-party auditor to help run their proof of reserves protocol \cite{KrakenPoR}. In Feb 2020, Kraken CEO Jesse Powell mentioned lack of multisig address support in Provisions as one of the reasons to defer attempting its use \cite{KrakenCEO}.
+To the best of our knowledge, there is no publicly verifiable privacy-preserving proof of reserves (PoR) protocol for Bitcoin that supports all the address types. Current PoR protocols used in practice involve a trusted party --- an auditor or the exchange themselves \cite{NicCarterPoR}.  For example, the Kraken exchange uses a third-party auditor to help run their PoR protocol \cite{KrakenPoR}. In Feb 2020, Kraken CEO Jesse Powell mentioned lack of multisig address support in Provisions as one of the reasons to defer attempting its use \cite{KrakenCEO}.
 
 \textbf{Goal:} Enable privacy-preserving proof of Bitcoin reserves that is publicly verifiable on-chain. 
 
+\paragraph{What about collusion?} An exchange with insufficient Bitcoin reserves could generate a valid PoR by colluding with another party who has sufficient reserves. The colluding party would not need to transfer the funds to the exchange. They would only be required to share the output of the PoR protocol with the exchange.
+
+One approach to prevent collusion is to have the PoR protocol output a nullifier for the UTXOs used by the prover. This would help detect collusion only if the party colluding with the exchange also generates their own PoR. The colluding party may itself be an exchange, who generates PoRs to assure customers. But if the colluding party does generate their own PoR, then the nullifier approach fails to detect collusion.
+
+Even without collusion-resistance, it seems worthwhile to have a privacy-preserving Bitcoin PoR protocol that supports all UTXO types. Generating a proxy PoR for an insolvent exchange could be considered unethical, which would reduce the number of willing parties. For large reserve amounts, parties capable of generating the proxy PoR may not want to risk litigation or reputational damage.
+
 \section{BitcoinVM}%
 \label{sec:bitcoinvm}
-To prove ownership of Bitcoin UTXOs in a privacy-preserving manner, they have to be stored in data structure that is amenable to zero-knowledge proofs. Our initial thoughts are as follows:
+To prove ownership of Bitcoin UTXOs in a privacy-preserving manner, they have to be stored in data structure that is amenable to zero-knowledge proofs. Our initial plan is as follows:
 \begin{enumerate}
   \item Store all the Bitcoin UTXOs upto a certain block height in a sparse Merkle tree (SMT). The key to the leaves could be a hash of the transaction ID (TxID) and output index that identifies a UTXO.
-  \item Each Bitcoin block has transactions that spend old UTXOs and create new ones. The SMT would need to be updated after each block.
-  \item Transaction validation in Bitcoin involves feeding a challenge script and its corresponding response script as inputs to a stack machine which supports a small number of opcodes. 
-  \item The BitcoinVM will be the circuit that gives a validity proof of the correctness of SMT root transitions. It needs to be able to verify scripts written in Bitcoin Script. 
-  \item Given a valid SMT with UTXOs as its leaves, ownership of a certain amount of coins can be proven using privacy-preserving Merkle proofs (like in Tornado Cash).
+  \item Each Bitcoin block has transactions that spend old UTXOs and create new ones. The SMT would need to be updated after each block. The public inputs to the SMT update circuit will be the following:
+    \begin{itemize}
+      \item The previous SMT root
+      \item The new SMT root
+      \item The block hash of the new Bitcoin block
+    \end{itemize}
+  \item The SMT update circuit will not verify the correctness of the new Bitcoin block. We assume that the verifier will check that the block hash input corresponds to a valid Bitcoin block that has enough confirmations.
+  \item Given a valid SMT with UTXOs as its leaves, ownership of a certain amount of coins can be proven using privacy-preserving Merkle proofs
+  \item The circuit that proves ownership of UTXOs needs to be able to verify scripts written in Bitcoin Script. These scripts have a sequence of 1-byte opcodes and are not restricted to a few templates (see examples on the Miniscript page \cite{Miniscript}). To support different kinds of UTXOs, the circuit needs to interpret the UTXO's scriptPubkey one byte at a time.
+  \item  Some opcodes in Bitcoin Script like OP\textunderscore CHECKSIG require a large number of rows (approximately 140,000) in halo2, due to the ECDSA signature verification. Some other opcodes like OP\textunderscore 1 require only one row. Implementing constraints of all opcodes at each byte of the scriptPubkey would be inefficient.
+  \item We propose to parse a UTXO's scriptPubkey and \textbf{accumulate the public inputs for all cryptographic opcodes} that need valid witnesses \cite{BitcoinCryptoOpcodes}. Examples of such inputs are the following:
+    \begin{itemize}
+      \item Public keys for the OP\textunderscore CHECKSIG opcode
+      \item Public keys for the OP\textunderscore CHECKMULTISIG opcode
+      \item Hash outputs corresponding to the OP\textunderscore HASH160 opcode
+    \end{itemize}
+    To illustrate the accumulation, suppose a UTXO has the following scriptPubkey:
+      \begin{align*}
+        \texttt{ <key1> OP\_CHECKSIG OP\_SWAP <key2> OP\_CHECKSIG OP\_BOOLOR }
+      \end{align*}
+     A valid witness for this UTXO would be an ECDSA signature corresponding to one of the two keys. Only one of the keys needs to be accumulated in the accumulator corresponding to the OP\textunderscore CHECKSIG opcode.
+  \item The BitcoinVM circuit will verify that the prover can provide witnesses for all accumulated cryptographic opcodes \textbf{upto a maximum number}.
+    \begin{itemize}
+      \item Suppose we fix the maximum number of OP\textunderscore CHECKSIG opcodes to be 5. This would mean that we cannot use BitcoinVM to generate an ownership proof for UTXOs that require witnesses corresponding to 6 or more OP\textunderscore CHECKSIG opcodes.
+    \end{itemize}
+  \item A PoR will require combining proofs of ownership of several UTXOs. This step might require proof aggregation and/or recursion.
 \end{enumerate}
 
-\section{Challenges}%
-\label{sec:challenges}
-BitcoinVM needs several circuits not currently present in the Halo2 ecosystem.
+\section{Current Status}%
+\label{sec:current_status}
+So far, we have implemented the following circuits. The code is available at \url{https://github.com/avras/bitcoinvm}. 
 \begin{itemize}
   \item RIPEMD160 hash function
-  \item Bitcoin Script validator
-    \begin{itemize}
-      \item Multisig response script validator
-      \item P2SH response script validator
-      \item SegWit response script validator
-    \end{itemize}
-  \item Sparse Merkle Tree (??)
-  \item And probably many more
+  \item Data push operators (\url{https://en.bitcoin.it/wiki/Script#Constants}) 
+  \item P2PK UTXO witness verification
+\end{itemize}
+
+A lot of work remains. Here is a partial list of circuits to be implemented.
+\begin{itemize}
+  \item P2PKH UTXO witness verification
+  \item P2SH UTXO witness verification
+  \item Multsig UTXO witness verification
+  \item HASH160 witness verification
+  \item Sparse Merkle Tree
+  \item SegWit UTXOs witness verification
 \end{itemize}
 
 

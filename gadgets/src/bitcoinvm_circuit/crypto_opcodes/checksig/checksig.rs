@@ -560,10 +560,10 @@ mod tests {
     use halo2_proofs::circuit::{SimpleFloorPlanner, Layouter};
     use halo2_proofs::halo2curves::{secp256k1::{Secp256k1Affine, Fq, Fp}};
     use halo2_proofs::plonk::{Circuit, ConstraintSystem, Error};
-    use rand::{Rng, SeedableRng};
+    use rand::{Rng, SeedableRng, RngCore};
     use rand_xorshift::XorShiftRng;
     use secp256k1::{self, Secp256k1, SecretKey, PublicKey};
-    use secp256k1::constants::PUBLIC_KEY_SIZE;
+    use secp256k1::constants::{PUBLIC_KEY_SIZE, UNCOMPRESSED_PUBLIC_KEY_SIZE};
 
     use crate::bitcoinvm_circuit::constants::*;
     use crate::bitcoinvm_circuit::crypto_opcodes::checksig::checksig_util::{ct_option_ok_or, pk_bytes_swap_endianness};
@@ -661,9 +661,59 @@ mod tests {
         }
     }
 
+    fn generate_sign_data(sk_vec: Vec<SecretKey>, mut rng: impl RngCore) -> Vec<SignData> {
+        let secp = Secp256k1::new();
+        let mut sign_data_vec = vec![];
+
+        for secret_key in sk_vec {
+            let public_key = PublicKey::from_secret_key(&secp, &secret_key);
+            let sig_randomness = Fq::random(&mut rng);
+            let mut sk_bytes = secret_key.secret_bytes();
+            sk_bytes.reverse();
+
+            let sk = ct_option_ok_or(
+                Fq::from_bytes(&sk_bytes), libsecp256k1::Error::InvalidSecretKey
+            ).unwrap();
+            let sig = sign(sig_randomness, sk, Fq::from(ECDSA_MESSAGE_HASH as u64));
+    
+            let pk_be = public_key.serialize_uncompressed();
+            let pk_le = pk_bytes_swap_endianness(&pk_be[1..]);
+            
+            let x = ct_option_ok_or(
+                Fp::from_bytes(pk_le[..32].try_into().unwrap()),
+                libsecp256k1::Error::InvalidPublicKey,
+            ).expect("x coordinate corrupted");
+            let y = ct_option_ok_or(
+                Fp::from_bytes(pk_le[32..].try_into().unwrap()),
+                libsecp256k1::Error::InvalidPublicKey,
+            ).expect("y coordinate corrupted");
+
+            let pk = ct_option_ok_or(
+                Secp256k1Affine::from_xy(x, y),
+                libsecp256k1::Error::InvalidPublicKey,
+            ).expect("Public key corrupted");
+
+            let sign_data: SignData = SignData { signature: sig, pk };
+            sign_data_vec.push(sign_data);
+        }
+        sign_data_vec
+    }
+
+    fn generate_public_inputs<F: Field>(mut script_pubkey: Vec<u8>, randomness: F) -> Vec<F> {
+        script_pubkey.reverse();
+        let script_rlc_init = script_pubkey.clone().into_iter().fold(F::zero(), |acc, v| {
+            acc * randomness + F::from(v as u64)
+        });
+
+        vec![
+            F::from(script_pubkey.len() as u64),
+            script_rlc_init,
+            randomness,
+        ]
+    }
 
     #[test]
-    fn test_opchecksig() {
+    fn test_opchecksig_compressed_p2pk() {
         let k = 19;
 
         let secp = Secp256k1::new();
@@ -676,7 +726,6 @@ mod tests {
         script_pubkey.extend(public_key_bytes.iter());
         script_pubkey.push(OP_CHECKSIG as u8);
 
-        let mut rng = XorShiftRng::seed_from_u64(1);
         let mut initial_stack_vec = vec![BnScalar::one()]; // This value will force a signature verification later
         initial_stack_vec.extend_from_slice(&[BnScalar::zero(); MAX_STACK_DEPTH-1]);
         let initial_stack: [BnScalar; MAX_STACK_DEPTH] = initial_stack_vec.as_slice().try_into().unwrap();
@@ -685,32 +734,9 @@ mod tests {
         let pk_parser_initial_stack = vec![StackElement::ValidSignature];
         let collected_pks = collect_public_keys(script_pubkey.clone(), pk_parser_initial_stack).expect("PK collection failed");
 
+        let mut rng = XorShiftRng::seed_from_u64(1);
         let aux_generator = Secp256k1Affine::random(&mut rng);
-        let sig_randomness = Fq::random(&mut rng);
-        let mut sk_bytes = secret_key.secret_bytes();
-        sk_bytes.reverse();
-        let sk = ct_option_ok_or(
-            Fq::from_bytes(&sk_bytes), libsecp256k1::Error::InvalidSecretKey
-        ).unwrap();
-        let sig = sign(sig_randomness, sk, Fq::from(ECDSA_MESSAGE_HASH as u64));
-
-        let pk_be = public_key.serialize_uncompressed();
-        let pk_le = pk_bytes_swap_endianness(&pk_be[1..]);
-        let x = ct_option_ok_or(
-            Fp::from_bytes(pk_le[..32].try_into().unwrap()),
-            libsecp256k1::Error::InvalidPublicKey,
-        ).expect("x coordinate corrupted");
-        let y = ct_option_ok_or(
-            Fp::from_bytes(pk_le[32..].try_into().unwrap()),
-            libsecp256k1::Error::InvalidPublicKey,
-        ).expect("y coordinate corrupted");
-        let pk = ct_option_ok_or(
-            Secp256k1Affine::from_xy(x, y),
-            libsecp256k1::Error::InvalidPublicKey,
-        ).expect("Public key corrupted");
-        
-        let sign_data: SignData = SignData { signature: sig, pk };
-        
+        let signatures = generate_sign_data(vec![secret_key], rng.clone());
 
         let r: u64 = rng.gen();
         let randomness: BnScalar = BnScalar::from(r);
@@ -724,20 +750,59 @@ mod tests {
             script_pubkey: script_pubkey.clone(),
             randomness,
             initial_stack,
-            signatures: vec![sign_data],
+            signatures,
             collected_pks,
         };
 
-        script_pubkey.reverse();
-        let script_rlc_init = script_pubkey.clone().into_iter().fold(BnScalar::zero(), |acc, v| {
-            acc * randomness + BnScalar::from(v as u64)
-        });
+        let public_input = generate_public_inputs(script_pubkey, randomness);
 
-        let public_input = vec![
-            BnScalar::from(script_pubkey.len() as u64),
-            script_rlc_init,
+        let prover = MockProver::run(k, &circuit, vec![public_input.clone(), vec![]]).unwrap();
+        prover.assert_satisfied();
+    }
+
+    #[test]
+    fn test_opchecksig_uncompressed_p2pk() {
+        let k = 19;
+
+        let secp = Secp256k1::new();
+        let secret_key = SecretKey::from_slice(&[0xcd; 32]).expect("32 bytes, within curve order");
+        let public_key = PublicKey::from_secret_key(&secp, &secret_key);
+        let public_key_bytes: [u8; UNCOMPRESSED_PUBLIC_KEY_SIZE] = public_key.serialize_uncompressed();
+        
+        let mut script_pubkey: Vec<u8> = vec![];
+        script_pubkey.push(UNCOMPRESSED_PUBLIC_KEY_SIZE as u8); // "Push 65 bytes" opcode
+        script_pubkey.extend(public_key_bytes.iter());
+        script_pubkey.push(OP_CHECKSIG as u8);
+
+        let mut initial_stack_vec = vec![BnScalar::one()]; // This value will force a signature verification later
+        initial_stack_vec.extend_from_slice(&[BnScalar::zero(); MAX_STACK_DEPTH-1]);
+        let initial_stack: [BnScalar; MAX_STACK_DEPTH] = initial_stack_vec.as_slice().try_into().unwrap();
+        
+        // TODO: Derive initial stack and pk_parser_initial_stack from the same value
+        let pk_parser_initial_stack = vec![StackElement::ValidSignature];
+        let collected_pks = collect_public_keys(script_pubkey.clone(), pk_parser_initial_stack).expect("PK collection failed");
+
+        let mut rng = XorShiftRng::seed_from_u64(1);
+        let aux_generator = Secp256k1Affine::random(&mut rng);
+        let signatures = generate_sign_data(vec![secret_key], rng.clone());
+
+        let r: u64 = rng.gen();
+        let randomness: BnScalar = BnScalar::from(r);
+
+        let circuit = TestOpChecksigCircuit::<BnScalar, MAX_CHECKSIG_COUNT> {
+            op_checksig_chip: OpCheckSigChip::<BnScalar, MAX_CHECKSIG_COUNT> {
+                aux_generator,
+                window_size: 2,
+                _marker: std::marker::PhantomData,
+            },
+            script_pubkey: script_pubkey.clone(),
             randomness,
-        ];
+            initial_stack,
+            signatures,
+            collected_pks,
+        };
+
+        let public_input = generate_public_inputs(script_pubkey, randomness);
 
         let prover = MockProver::run(k, &circuit, vec![public_input.clone(), vec![]]).unwrap();
         prover.assert_satisfied();

@@ -117,10 +117,10 @@ Suppose that the input after padding consists of $t$ 16-word blocks. Let $X_i[j]
     \State $A' \gets h_0$; $B' \gets h_1$; $C' \gets h_2$; $D' \gets h_3$; $E' \gets h_4$
     \For{$j = 0$ to $79$}
     \State $p = \left\lfloor \frac{j}{16}  \right\rfloor + 1$ \Comment{Calculate phase index}
-    \State $T \gets \texttt{rol}_{s[j]} \left( A \boxplus f_p(B, C, D) \boxplus X_i[r[j]] \boxplus K[j]\right) \boxplus E$
+    \State $T \gets \texttt{rol}_{s[j]} \left( A \boxplus f_p(B, C, D) \boxplus X_i[r[j]] \boxplus K[p]\right) \boxplus E$
     \State $A \gets E$; $E \gets D$; $D \gets \texttt{rol}_{10}(C)$; $C \gets B$; $B \gets T$
     \State $p' = 6-p$
-    \State $T \gets \texttt{rol}_{s'[j]} \left( A' \boxplus f_{p'}(B', C', D') \boxplus X_i[r'[j]] \boxplus K'[j]\right) \boxplus E'$
+    \State $T \gets \texttt{rol}_{s'[j]} \left( A' \boxplus f_{p'}(B', C', D') \boxplus X_i[r'[j]] \boxplus K'[p]\right) \boxplus E'$
     \State $A' \gets E'$; $E' \gets D'$; $D' \gets \texttt{rol}_{10}(C')$; $C' \gets B'$; $B' \gets T$
     \EndFor
     \State $T \gets h_1 \boxplus C \boxplus D'$; $h_1 \gets h_2 \boxplus D \boxplus E'$; $h_2 = h_3 \boxplus E \boxplus A'$;
